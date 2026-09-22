@@ -1,20 +1,24 @@
-import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { useState } from "react";
+import { SQLiteProvider } from "expo-sqlite";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import { LanguageContext } from "./src/context/LanguageContext";
+import { initDb } from "./src/data/database";
+import { CustomSplash } from "./src/components/CustomSplash";
+import { ExpenseApp } from "./src/application/ExpenseApp";
 
-export default function App() {
+function App() {
+  const [showSplash, setShowSplash] = useState(true);
+  const [language, setLanguage] = useState<"en" | "bn">("en");
+
   return (
-    <View style={styles.container}>
-      <Text>Open up App.tsx to start working on your app!</Text>
-      <StatusBar style="auto" />
-    </View>
+    <LanguageContext.Provider value={{ language, setLanguage }}>
+      <SafeAreaProvider>
+        <SQLiteProvider databaseName="kharcho.db" onInit={initDb}>
+          <ExpenseApp splashVisible={showSplash} />
+          {showSplash && <CustomSplash onFinish={() => setShowSplash(false)} />}
+        </SQLiteProvider>
+      </SafeAreaProvider>
+    </LanguageContext.Provider>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
+export default App;
