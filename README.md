@@ -1,4 +1,4 @@
-# Kharcho mobile app
+# Daily Spend mobile app
 
 Offline-first personal expense tracker built with Expo, React Native, TypeScript and SQLite.
 
