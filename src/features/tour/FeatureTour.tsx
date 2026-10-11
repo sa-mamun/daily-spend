@@ -69,7 +69,7 @@ function FeatureTourConnector({
   // Leave a tiny gap before the head so neither wing gets covered by the body.
   const path = `M ${startX} ${startY} C ${controlOneX} ${controlOneY}, ${controlTwoX} ${controlTwoY}, ${bodyEndX} ${bodyEndY}`;
   const arrowHead = `M ${headBackX + normalX * headWidth} ${headBackY + normalY * headWidth} L ${targetX} ${targetY} L ${headBackX - normalX * headWidth} ${headBackY - normalY * headWidth}`;
-  const color = dark ? "#a8e6bd" : PURPLE;
+  const color = dark ? "#edc176" : PURPLE;
   return (
     <Svg
       pointerEvents="none"
@@ -239,7 +239,7 @@ export function FeatureTourModal({
               <Ionicons
                 name={current.icon}
                 size={21}
-                color={dark ? "#a8e6bd" : PURPLE}
+                color={dark ? "#edc176" : PURPLE}
               />
             </View>
             <Text

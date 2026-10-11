@@ -1,15 +1,14 @@
 import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Easing, Pressable, ScrollView, View } from "react-native";
+import { Animated, Easing, ScrollView, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
+import { mintTheme } from "../../theme/mint";
 import { Text } from "../../i18n/Text";
 import { LanguageContext } from "../../context/LanguageContext";
 import { ThemeContext, CARD_RADIUS, PURPLE } from "../../theme/constants";
 import { styles, darkStyles } from "../../theme/styles";
 import type { Expense } from "../../types/models";
-import { taka } from "../../utils/dates";
-import { AnimatedTotal } from "../../components/AnimatedTotal";
-import { CategoryIcon } from "../../components/CategoryIcon";
+import { ReportOverview } from "./ReportOverview";
+import { CategoryDonutChart } from "./CategoryDonutChart";
 import { EmptyState } from "../../components/ExpenseList";
 import { YearlyTrendChart } from "./YearlyTrendChart";
 
@@ -25,7 +24,6 @@ export function ReportsScreen({ expenses }: { expenses: Expense[] }) {
   const { language } = useContext(LanguageContext);
   const [period, setPeriod] = useState<"month" | "year">("month");
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const reportEntrance = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     reportEntrance.setValue(0);
@@ -47,43 +45,6 @@ export function ReportsScreen({ expenses }: { expenses: Expense[] }) {
       },
     ],
   };
-  const reportAmbientMotion = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const animation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(reportAmbientMotion, {
-          toValue: 1,
-          duration: 1900,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-        Animated.timing(reportAmbientMotion, {
-          toValue: 0,
-          duration: 1900,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-    animation.start();
-    return () => animation.stop();
-  }, [reportAmbientMotion]);
-  const reportGlowOneFloat = reportAmbientMotion.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 8],
-  });
-  const reportGlowTwoScale = reportAmbientMotion.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 1.12],
-  });
-  const reportGlowThreeFloat = reportAmbientMotion.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-6, 7],
-  });
-  const reportGlowFourScale = reportAmbientMotion.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1.08, 0.9],
-  });
   const locale = language === "en" ? "en-US" : "bn-BD";
   const year = selectedDate.getFullYear();
   const month = selectedDate.getMonth();
@@ -165,30 +126,12 @@ export function ReportsScreen({ expenses }: { expenses: Expense[] }) {
     return Array.from({ length: days }, (_, index) => {
       const key = `${monthKey}-${String(index + 1).padStart(2, "0")}`;
       return {
-        label: String(index + 1),
+        label: (index + 1).toLocaleString(locale),
         value: expenseTotalsByDate[key] || 0,
       };
     });
   }, [expenseTotalsByDate, expenseTotalsByMonth, locale, month, monthKey, period, year]);
   const chartMax = Math.max(...chartItems.map((item) => item.value), 1);
-  const categoryTotals = Object.entries(
-    periodExpenses.reduce<Record<string, { amount: number; icon: string }>>(
-      (summary, expense) => {
-        const current = summary[expense.categoryName] || {
-          amount: 0,
-          icon: expense.icon,
-        };
-        summary[expense.categoryName] = {
-          amount: current.amount + expense.amount,
-          icon: current.icon,
-        };
-        return summary;
-      },
-      {},
-    ),
-  )
-    .sort(([, first], [, second]) => second.amount - first.amount)
-    .slice(0, 5);
   const change = previousTotal
     ? Math.round(Math.abs(((total - previousTotal) / previousTotal) * 100))
     : 0;
@@ -212,136 +155,18 @@ export function ReportsScreen({ expenses }: { expenses: Expense[] }) {
 
   return (
     <>
-      <View style={[styles.pageIntro, { marginBottom: 12 }]}>
-        <View>
-          <Text style={[styles.sectionTitle, dark && darkStyles.cardTitle]}>
-            রিপোর্ট
-          </Text>
-          <Text style={[styles.muted, dark && darkStyles.muted]}>
-            {period === "month"
-              ? "মাস অনুযায়ী খরচ দেখুন"
-              : "বছর অনুযায়ী খরচ দেখুন"}
-          </Text>
-        </View>
-      </View>
-
-      <View style={[styles.reportToggle, dark && darkStyles.reportToggle]}>
-        {([
-          ["month", "মাসিক"],
-          ["year", "বার্ষিক"],
-        ] as const).map(([key, label]) => (
-          <Pressable
-            key={key}
-            style={[
-              styles.reportToggleOption,
-              period === key && styles.reportToggleOptionActive,
-              period === key && dark && darkStyles.reportToggleOptionActive,
-            ]}
-            onPress={() => setPeriod(key)}
-          >
-            <Text
-              style={[
-                styles.reportToggleText,
-                dark && darkStyles.reportToggleText,
-                period === key && styles.reportToggleTextActive,
-                period === key && dark && darkStyles.reportToggleTextActive,
-              ]}
-            >
-              {label}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-
-      <View style={[styles.reportPeriod, dark && darkStyles.reportPeriod]}>
-        <Pressable
-          accessibilityLabel="পূর্ববর্তী সময়"
-          onPress={() => shiftPeriod(-1)}
-          style={styles.reportArrowButton}
-        >
-          <Ionicons
-            name="chevron-back"
-            size={20}
-            color={dark ? "#a8e6bd" : PURPLE}
-          />
-        </Pressable>
-        <Text style={[styles.reportPeriodText, dark && darkStyles.reportPeriodText]}>
-          {periodLabel}
-        </Text>
-        <Pressable
-          accessibilityLabel="পরবর্তী সময়"
-          onPress={() => shiftPeriod(1)}
-          style={styles.reportArrowButton}
-        >
-          <Ionicons
-            name="chevron-forward"
-            size={20}
-            color={dark ? "#a8e6bd" : PURPLE}
-          />
-        </Pressable>
-      </View>
-
-      <Animated.View style={reportCardStyle}>
-        <LinearGradient
-          colors={dark ? ["#155e41", "#20845a"] : ["#087443", "#22a865"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[styles.reportHero, CARD_RADIUS]}
-        >
-          <Animated.View
-            style={[
-              styles.reportHeroOrb,
-              { transform: [{ translateY: reportGlowOneFloat }] },
-            ]}
-          />
-          <Animated.View
-            style={[
-              styles.reportHeroBubbleTwo,
-              { transform: [{ scale: reportGlowTwoScale }] },
-            ]}
-          />
-          <Animated.View
-            style={[
-              styles.reportHeroBubbleThree,
-              { transform: [{ translateY: reportGlowThreeFloat }] },
-            ]}
-          />
-          <Animated.View
-            style={[
-              styles.reportHeroBubbleFour,
-              { transform: [{ scale: reportGlowFourScale }] },
-            ]}
-          />
-          <Text style={styles.reportHeroHint}>এই সময়ে মোট খরচ</Text>
-          <AnimatedTotal value={total} style={styles.reportHeroTotal} />
-          <Text style={styles.reportHeroTrend}>
-            {previousTotal
-              ? `${change}% ${total > previousTotal ? "বেশি" : "কম"} · ${
-                  period === "month"
-                    ? "আগের মাসের তুলনায়"
-                    : "আগের বছরের তুলনায়"
-                }`
-              : "আগের সময়ের তুলনায় —"}
-          </Text>
-        </LinearGradient>
-      </Animated.View>
-
-      <Animated.View style={[styles.reportMetrics, reportCardStyle]}>
-        <View style={[styles.reportMetric, dark && darkStyles.reportMetric]}>
-          <Text style={[styles.muted, dark && darkStyles.muted]}>
-            {period === "month" ? "প্রতিদিন গড়" : "প্রতি মাসে গড়"}
-          </Text>
-          <Text style={[styles.reportMetricValue, dark && darkStyles.reportMetricValue]}>
-            {taka(average, language)}
-          </Text>
-        </View>
-        <View style={[styles.reportMetric, dark && darkStyles.reportMetric]}>
-          <Text style={[styles.muted, dark && darkStyles.muted]}>লেনদেন</Text>
-          <Text style={[styles.reportMetricValue, dark && darkStyles.reportMetricValue]}>
-            {periodExpenses.length} টি
-          </Text>
-        </View>
-      </Animated.View>
+      <ReportOverview
+        period={period}
+        periodLabel={periodLabel}
+        total={total}
+        previousTotal={previousTotal}
+        change={change}
+        average={average}
+        count={periodExpenses.length}
+        onPeriodChange={setPeriod}
+        onShift={shiftPeriod}
+        animatedStyle={reportCardStyle}
+      />
 
       <Animated.View
         style={[styles.card, CARD_RADIUS, dark && darkStyles.card, reportCardStyle]}
@@ -358,7 +183,7 @@ export function ReportsScreen({ expenses }: { expenses: Expense[] }) {
           <Ionicons
             name="bar-chart-outline"
             size={20}
-            color={dark ? "#a8e6bd" : PURPLE}
+            color={dark ? "#edc176" : PURPLE}
           />
         </View>
         {total ? period === "year" ? (
@@ -382,7 +207,8 @@ export function ReportsScreen({ expenses }: { expenses: Expense[] }) {
                     styles.reportBar,
                     dark && darkStyles.reportBar,
                     {
-                      height: Math.max(5, (item.value / chartMax) * 128),
+                      height: Math.max(5, (item.value / chartMax) * 100),
+                      backgroundColor: item.value === chartMax ? "#dfa43e" : mintTheme(dark).border,
                     },
                   ]}
                 />
@@ -423,145 +249,14 @@ export function ReportsScreen({ expenses }: { expenses: Expense[] }) {
           <Ionicons
             name="pie-chart-outline"
             size={20}
-            color={dark ? "#a8e6bd" : PURPLE}
+            color={dark ? "#edc176" : PURPLE}
           />
         </View>
-        {categoryTotals.length ? (
-          categoryTotals.map(([name, summary], index) => {
-            const percentage = total ? (summary.amount / total) * 100 : 0;
-            const subcategoryTotals = Object.entries(
-              periodExpenses
-                .filter((expense) => expense.categoryName === name)
-                .reduce<Record<string, number>>((subcategories, expense) => {
-                  const subcategory = expense.subcategoryName || "সাধারণ";
-                  subcategories[subcategory] =
-                    (subcategories[subcategory] || 0) + expense.amount;
-                  return subcategories;
-                }, {}),
-            ).sort(([, first], [, second]) => second - first);
-            const isExpanded = expandedCategory === name;
-            return (
-              <View key={name}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`${name} ${
-                    isExpanded ? "collapse" : "expand"
-                  }`}
-                  style={[
-                    styles.reportCategoryRow,
-                    isExpanded && styles.reportCategoryRowActive,
-                    isExpanded && dark && darkStyles.reportCategoryRowActive,
-                  ]}
-                  onPress={() =>
-                    setExpandedCategory(isExpanded ? null : name)
-                  }
-                >
-                  <CategoryIcon
-                    icon={summary.icon}
-                    size={17}
-                    color={dark ? "#c3f0d2" : PURPLE}
-                    containerStyle={[
-                      styles.reportCategoryIcon,
-                      dark && darkStyles.reportCategoryIcon,
-                    ]}
-                  />
-                  <View style={styles.reportCategoryInfo}>
-                    <View style={styles.reportCategoryHeader}>
-                      <Text
-                        style={[styles.rowTitle, dark && darkStyles.rowTitle]}
-                        numberOfLines={1}
-                      >
-                        {name}
-                      </Text>
-                      <Text style={[styles.amount, dark && darkStyles.amount]}>
-                        {taka(summary.amount, language)}
-                      </Text>
-                    </View>
-                    <View
-                      style={[
-                        styles.reportProgressTrack,
-                        dark && darkStyles.reportProgressTrack,
-                      ]}
-                    >
-                      <View
-                        style={[
-                          styles.reportProgressFill,
-                          { width: `${Math.max(3, percentage)}%` },
-                          {
-                            backgroundColor: [
-                              "#087443",
-                              "#22a865",
-                              "#5b8def",
-                              "#e2a93b",
-                              "#df5f65",
-                            ][index % 5],
-                          },
-                        ]}
-                      />
-                    </View>
-                  </View>
-                  <Ionicons
-                    name={isExpanded ? "chevron-up" : "chevron-down"}
-                    size={17}
-                    color={dark ? "#a7acc0" : "#8a8fa3"}
-                  />
-                </Pressable>
-                {isExpanded && (
-                  <View
-                    style={[
-                      styles.subBreakdown,
-                      dark && darkStyles.subBreakdown,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.subBreakdownTitle,
-                        dark && darkStyles.subBreakdownTitle,
-                      ]}
-                    >
-                      সাব-ক্যাটাগরি অনুযায়ী
-                    </Text>
-                    {subcategoryTotals.length ? (
-                      subcategoryTotals.map(([subcategory, amount]) => (
-                        <View style={styles.subBreakdownRow} key={subcategory}>
-                          <Text
-                            style={[
-                              styles.subBreakdownName,
-                              dark && darkStyles.subBreakdownName,
-                            ]}
-                            numberOfLines={1}
-                          >
-                            {subcategory}
-                          </Text>
-                          <Text
-                            style={[
-                              styles.subBreakdownAmount,
-                              dark && darkStyles.subBreakdownAmount,
-                            ]}
-                          >
-                            {taka(amount, language)}
-                          </Text>
-                        </View>
-                      ))
-                    ) : (
-                      <Text
-                        style={[styles.muted, dark && darkStyles.muted]}
-                      >
-                        সাব-ক্যাটাগরি নেই
-                      </Text>
-                    )}
-                  </View>
-                )}
-              </View>
-            );
-          })
+        {total > 0 ? (
+          <CategoryDonutChart key={periodLabel} expenses={periodExpenses} />
         ) : (
-          <EmptyState
-            icon="pie-chart-outline"
-            title="কোনো খরচ পাওয়া যায়নি"
-            message="এই সময়ে কোনো খরচ নেই।"
-            compact
-          />
+          <EmptyState icon="pie-chart-outline" title="কোনো খরচ পাওয়া যায়নি"
+            message="এই সময়ে কোনো খরচ নেই।" compact />
         )}
       </Animated.View>
     </>

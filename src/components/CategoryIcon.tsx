@@ -21,7 +21,7 @@ export function CategoryIcon({
       <Ionicons
         name={categoryIconName(icon)}
         size={size}
-        color={color || (dark ? "#c3f0d2" : PURPLE)}
+        color={color || (dark ? "#edc176" : PURPLE)}
       />
     </View>
   );

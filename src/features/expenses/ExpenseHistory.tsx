@@ -75,10 +75,10 @@ export function ExpenseHistory({
               minHeight: 42,
               justifyContent: "space-between",
               borderWidth: 1,
-              borderColor: dark ? "#414965" : "#eceef5",
+              borderColor: dark ? "#454035" : "#e8e4db",
               borderRadius: 10,
               paddingHorizontal: 10,
-              backgroundColor: dark ? "#20533f" : "#f7f8fc",
+              backgroundColor: dark ? "#48391f" : "#efebe2",
               flexDirection: "row",
               alignItems: "center",
             }}
@@ -88,11 +88,11 @@ export function ExpenseHistory({
               style={{
                 color: startDate
                   ? dark
-                    ? "#f2f3f8"
-                    : "#1c2030"
+                    ? "#f5f0e6"
+                    : "#181713"
                   : dark
-                    ? "#a7acc0"
-                    : "#8a8fa3",
+                    ? "#b9b2a4"
+                    : "#706b61",
                 fontSize: 12,
               }}
             >
@@ -101,7 +101,7 @@ export function ExpenseHistory({
             <Ionicons
               name="calendar-outline"
               size={17}
-              color={dark ? "#a8e6bd" : PURPLE}
+              color={dark ? "#edc176" : PURPLE}
             />
           </Pressable>
           <Text style={[styles.muted, dark && darkStyles.muted]}>—</Text>
@@ -111,10 +111,10 @@ export function ExpenseHistory({
               minHeight: 42,
               justifyContent: "space-between",
               borderWidth: 1,
-              borderColor: dark ? "#414965" : "#eceef5",
+              borderColor: dark ? "#454035" : "#e8e4db",
               borderRadius: 10,
               paddingHorizontal: 10,
-              backgroundColor: dark ? "#2b3042" : "#f7f8fc",
+              backgroundColor: dark ? "#48391f" : "#efebe2",
               flexDirection: "row",
               alignItems: "center",
             }}
@@ -124,11 +124,11 @@ export function ExpenseHistory({
               style={{
                 color: endDate
                   ? dark
-                    ? "#f2f3f8"
-                    : "#1c2030"
+                    ? "#f5f0e6"
+                    : "#181713"
                   : dark
-                    ? "#a7acc0"
-                    : "#8a8fa3",
+                    ? "#b9b2a4"
+                    : "#706b61",
                 fontSize: 12,
               }}
             >
@@ -137,7 +137,7 @@ export function ExpenseHistory({
             <Ionicons
               name="calendar-outline"
               size={17}
-              color={dark ? "#b9b1ff" : PURPLE}
+              color={dark ? "#edc176" : PURPLE}
             />
           </Pressable>
           {(startDate || endDate) && (
@@ -171,13 +171,15 @@ export function ExpenseHistory({
         style={[
           styles.card,
           dark && darkStyles.card,
-          { borderBottomWidth: 0 },
+          { borderWidth: 0, backgroundColor: "transparent", paddingVertical: 0, paddingHorizontal: 0 },
         ]}
       >
         {expenses.length ? (
           <ExpenseList
             expenses={expenses}
-            surfaceColor={dark ? "#202536" : "#fff"}
+            appearance="orbit"
+            showDateHeaders
+            surfaceColor={dark ? "#2a2924" : "#fff"}
             onDelete={onDelete}
             onEdit={onEdit}
           />

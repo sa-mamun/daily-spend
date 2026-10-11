@@ -1,6 +1,7 @@
 import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  AppState,
   Animated,
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -13,9 +14,10 @@ import {
   View,
 } from "react-native";
 import { useSQLiteContext } from "expo-sqlite";
+import * as Notifications from "expo-notifications";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
-import { BlurView } from "expo-blur";
+import { mintTheme, MINT, MINT_INK, MINT_MODAL_SURFACE } from "../theme/mint";
 import { Ionicons } from "@expo/vector-icons";
 import { ThemeContext, PURPLE, DARK_MODAL_SURFACE, CARD_RADIUS, CHART_LABEL_SPACING, CHART_NO_BORDER, GLASS_NAV, COMPACT_NAV, COMPACT_NAV_BUTTON, COMPACT_NAV_ICON, COMPACT_NAV_LABEL, MAX_EXPENSE_AMOUNT, MAX_NOTE_LENGTH, MAX_NAME_LENGTH } from "../theme/constants";
 import { LanguageContext } from "../context/LanguageContext";
@@ -26,11 +28,29 @@ import type { Category, Subcategory, Expense, DashboardStats, IconName } from ".
 import { localDateKey, today, taka, dateText, dbDate } from "../utils/dates";
 import { styles, darkStyles } from "../theme/styles";
 import { CategoryIcon } from "../components/CategoryIcon";
+import { BottomNavigation } from "../components/BottomNavigation";
 import { AppDatePicker } from "../components/AppDatePicker";
 import { Dashboard } from "../features/dashboard/Dashboard";
+import { orbitTheme, ORBIT_CHROME } from "../features/dashboard/orbitTheme";
 import { ExpenseHistory } from "../features/expenses/ExpenseHistory";
+import { CenteredAmountInput } from "../features/expenses/CenteredAmountInput";
 import { CategoryScreen } from "../features/categories/CategoryScreen";
 import { ReportsScreen } from "../features/reports/ReportsScreen";
+import { BackupModal } from "../features/backup/BackupModal";
+import { BudgetScreen } from "../features/budget/BudgetScreen";
+import { ScheduledScreen } from "../features/scheduled/ScheduledScreen";
+import { ReminderReviewModal, type ReminderExpenseDraft } from "../features/scheduled/ReminderReviewModal";
+import {
+  checkBudgetNotifications,
+  loadMonthlyBudgetSummary,
+  type MonthlyBudgetSummary,
+} from "../features/budget/budgetService";
+import {
+  loadReminderReview,
+  markReminderOccurrence,
+  syncScheduledReminderNotifications,
+  type ReminderReview,
+} from "../features/scheduled/scheduledService";
 import { FeatureTourModal } from "../features/tour/FeatureTour";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -44,6 +64,8 @@ type CategoryDeleteTarget = {
   name: string;
   expenseCount: number;
   subcategoryCount: number;
+  categoryBudgetCount: number;
+  reminderCount: number;
 };
 
 export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
@@ -60,16 +82,12 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
   const saveScale = useRef(new Animated.Value(1)).current;
   const categoryAddScale = useRef(new Animated.Value(1)).current;
   const subcategoryAddScale = useRef(new Animated.Value(1)).current;
-  const navScales = useRef<Record<string, Animated.Value>>({
-    expenses: new Animated.Value(1),
-    dashboard: new Animated.Value(1),
-    categories: new Animated.Value(1),
-  }).current;
   const pageTransition = useRef(new Animated.Value(0)).current;
   const screenMounted = useRef(false);
   const [screen, setScreen] = useState<
-    "dashboard" | "expenses" | "categories" | "reports"
+    "dashboard" | "expenses" | "categories" | "reports" | "budget" | "scheduled"
   >("dashboard");
+  const [dataRevision, setDataRevision] = useState(0);
   const [darkMode, setDarkMode] = useState(false);
   const [showFeatureTour, setShowFeatureTour] = useState(false);
   const [featureTourPending, setFeatureTourPending] = useState(false);
@@ -84,6 +102,13 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
     transactionCount: 0,
     topCategory: "—",
   });
+  const [dashboardBudget, setDashboardBudget] =
+    useState<MonthlyBudgetSummary | null>(null);
+  const [reminderReview, setReminderReview] = useState<ReminderReview | null>(null);
+  const [savingReminderExpense, setSavingReminderExpense] = useState(false);
+  const handledReminderResponse = useRef<string | null>(null);
+  const [openBudgetEditorRequested, setOpenBudgetEditorRequested] =
+    useState(false);
   const [demoLoading, setDemoLoading] = useState(false);
   const defaultRangeStart = new Date();
   defaultRangeStart.setHours(0, 0, 0, 0);
@@ -99,6 +124,7 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
     useState<CategoryDeleteTarget | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [settingsModal, setSettingsModal] = useState(false);
+  const [backupModal, setBackupModal] = useState(false);
   const [clearDataConfirm, setClearDataConfirm] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const [expenseStartDate, setExpenseStartDate] = useState<Date | null>(
@@ -169,6 +195,15 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
       topCategory: topRow?.name || "—",
     });
   };
+  const refreshDashboardBudget = async () => {
+    try {
+      setDashboardBudget(
+        await loadMonthlyBudgetSummary(db, today().slice(0, 7)),
+      );
+    } catch (error) {
+      console.error("Failed to load dashboard budget:", error);
+    }
+  };
   const load = async () => {
     try {
       setCategories(
@@ -185,6 +220,9 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
         ),
       );
       await loadDashboardStats();
+      await refreshDashboardBudget();
+      await checkBudgetNotifications(db, language);
+      setDataRevision((revision) => revision + 1);
     } catch (error) {
       console.error("Failed to load expenses:", error);
     }
@@ -211,6 +249,10 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
         if (languageSetting?.value === "bn") setLanguage("bn");
         if (themeSetting?.value === "dark") setDarkMode(true);
         if (featureTourSetting?.value !== "1") setFeatureTourPending(true);
+        await syncScheduledReminderNotifications(
+          db,
+          languageSetting?.value === "bn" ? "bn" : "en",
+        );
       } catch (error) {
         console.error("Failed to load app settings:", error);
       }
@@ -220,6 +262,43 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
       active = false;
     };
   }, []);
+  useEffect(() => {
+    const openReminderReviewFromResponse = async (response: Notifications.NotificationResponse | null) => {
+      const data = response?.notification.request.content.data;
+      if (data?.kind !== "scheduled-reminder") return;
+      const reminderId = Number(data.reminderId);
+      const occurrenceDate = String(data.occurrenceDate || "");
+      if (!Number.isSafeInteger(reminderId) || !/^\d{4}-\d{2}-\d{2}$/.test(occurrenceDate)) return;
+      const responseKey = `${reminderId}:${occurrenceDate}`;
+      if (handledReminderResponse.current === responseKey) return;
+      handledReminderResponse.current = responseKey;
+      const review = await loadReminderReview(db, reminderId, occurrenceDate).catch((error) => {
+        console.error("Could not load reminder review:", error);
+        return null;
+      });
+      if (!review) return;
+      setMenuOpen(false);
+      setScreen("scheduled");
+      setReminderReview(review);
+    };
+
+    const listener = Notifications.addNotificationResponseReceivedListener((response) => {
+      void openReminderReviewFromResponse(response);
+    });
+    void Notifications.getLastNotificationResponseAsync()
+      .then(openReminderReviewFromResponse)
+      .catch((error) => console.error("Could not read initial reminder notification:", error));
+    const appStateSubscription = AppState.addEventListener("change", (state) => {
+      if (state === "active")
+        void syncScheduledReminderNotifications(db, language).catch((error) =>
+          console.error("Could not refresh scheduled reminders:", error),
+        );
+    });
+    return () => {
+      listener.remove();
+      appStateSubscription.remove();
+    };
+  }, [db, language]);
   useEffect(() => {
     if (!featureTourPending) return;
     const timer = setTimeout(
@@ -358,6 +437,60 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
       savingExpenseRef.current = false;
       setSavingExpense(false);
     }
+  };
+  const addReminderExpense = async (draft: ReminderExpenseDraft) => {
+    if (!reminderReview || savingReminderExpense) return;
+    setSavingReminderExpense(true);
+    try {
+      await db.withExclusiveTransactionAsync(async (tx) => {
+        const existing = await tx.getFirstAsync<{ status: string }>(
+          "SELECT status FROM reminder_occurrences WHERE reminderId = ? AND occurrenceDate = ?",
+          [reminderReview.reminderId, reminderReview.occurrenceDate],
+        );
+        if (existing) throw new Error("reminder-occurrence-already-handled");
+        const result = await tx.runAsync(
+          "INSERT INTO expenses (amount, categoryId, subcategoryId, note, expenseDate) VALUES (?, ?, ?, ?, ?)",
+          [draft.amount, draft.categoryId, draft.subcategoryId, draft.note, draft.expenseDate],
+        );
+        await tx.runAsync(
+          `INSERT INTO reminder_occurrences
+            (reminderId, occurrenceDate, status, expenseId, actedAt)
+           VALUES (?, ?, 'added', ?, CURRENT_TIMESTAMP)`,
+          [reminderReview.reminderId, reminderReview.occurrenceDate, result.lastInsertRowId],
+        );
+      });
+      setReminderReview(null);
+      await load();
+      await syncScheduledReminderNotifications(db, language);
+    } catch (error) {
+      console.error("Failed to save reminder expense:", error);
+      Alert.alert(
+        language === "en" ? "Expense not saved" : "খরচ সেভ হয়নি",
+        language === "en" ? "Please try again." : "আবার চেষ্টা করুন।",
+      );
+    } finally {
+      setSavingReminderExpense(false);
+    }
+  };
+  const skipReminderOccurrence = async () => {
+    if (!reminderReview) return;
+    try {
+      await markReminderOccurrence(
+        db,
+        reminderReview.reminderId,
+        reminderReview.occurrenceDate,
+        "skipped",
+      );
+      setReminderReview(null);
+      await syncScheduledReminderNotifications(db, language);
+    } catch (error) {
+      console.error("Could not skip reminder occurrence:", error);
+    }
+  };
+  const closeReminderReview = () => {
+    setReminderReview(null);
+    handledReminderResponse.current = null;
+    void Notifications.clearLastNotificationResponseAsync();
   };
   const addCategory = async () => {
     if (savingCategoryRef.current || savingCategory) return;
@@ -551,6 +684,8 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
     try {
       let expenseCount = 0;
       let subcategoryCount = 0;
+      let categoryBudgetCount = 0;
+      let reminderCount = 0;
       if (target.type === "category") {
         const expenseRow = await db.getFirstAsync<{ count: number }>(
           "SELECT COUNT(*) as count FROM expenses WHERE categoryId = ?",
@@ -562,12 +697,27 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
         );
         expenseCount = Number(expenseRow?.count || 0);
         subcategoryCount = Number(subcategoryRow?.count || 0);
+        const budgetRow = await db.getFirstAsync<{ count: number }>(
+          "SELECT COUNT(*) as count FROM category_budgets WHERE categoryId = ?",
+          [target.item.id],
+        );
+        categoryBudgetCount = Number(budgetRow?.count || 0);
+        const reminderRow = await db.getFirstAsync<{ count: number }>(
+          "SELECT COUNT(*) as count FROM scheduled_reminders WHERE categoryId = ?",
+          [target.item.id],
+        );
+        reminderCount = Number(reminderRow?.count || 0);
       } else {
         const expenseRow = await db.getFirstAsync<{ count: number }>(
           "SELECT COUNT(*) as count FROM expenses WHERE subcategoryId = ?",
           [target.item.id],
         );
         expenseCount = Number(expenseRow?.count || 0);
+        const reminderRow = await db.getFirstAsync<{ count: number }>(
+          "SELECT COUNT(*) as count FROM scheduled_reminders WHERE subcategoryId = ?",
+          [target.item.id],
+        );
+        reminderCount = Number(reminderRow?.count || 0);
       }
       setCategoryAction(null);
       setCategoryDeleteConfirm({
@@ -576,6 +726,8 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
         name: target.item.name,
         expenseCount,
         subcategoryCount,
+        categoryBudgetCount,
+        reminderCount,
       });
     } catch (error) {
       console.error("Failed to inspect category before delete:", error);
@@ -595,11 +747,23 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
           [target.id],
         );
         if (target.type === "category") {
+          await tx.runAsync(
+            "DELETE FROM reminder_occurrences WHERE reminderId IN (SELECT id FROM scheduled_reminders WHERE categoryId = ?)",
+            [target.id],
+          );
+          await tx.runAsync("DELETE FROM scheduled_reminders WHERE categoryId = ?", [target.id]);
+          await tx.runAsync("DELETE FROM budget_alerts WHERE categoryId = ?", [
+            target.id,
+          ]);
+          await tx.runAsync("DELETE FROM category_budgets WHERE categoryId = ?", [
+            target.id,
+          ]);
           await tx.runAsync("DELETE FROM subcategories WHERE categoryId = ?", [
             target.id,
           ]);
           await tx.runAsync("DELETE FROM categories WHERE id = ?", [target.id]);
         } else {
+          await tx.runAsync("UPDATE scheduled_reminders SET subcategoryId = NULL WHERE subcategoryId = ?", [target.id]);
           await tx.runAsync("DELETE FROM subcategories WHERE id = ?", [target.id]);
         }
       });
@@ -615,6 +779,7 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
       }
       setCategoryDeleteConfirm(null);
       await load();
+      await syncScheduledReminderNotifications(db, language);
     } catch (error) {
       console.error("Failed to delete category or subcategory:", error);
       setCategoryDeleteConfirm(null);
@@ -626,10 +791,15 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
     try {
       await db.withExclusiveTransactionAsync(async (tx) => {
         await tx.runAsync("DELETE FROM expenses");
+        await tx.runAsync("DELETE FROM budget_alerts");
+        await tx.runAsync("DELETE FROM category_budgets");
+        await tx.runAsync("DELETE FROM monthly_budgets");
+        await tx.runAsync("DELETE FROM reminder_occurrences");
+        await tx.runAsync("DELETE FROM scheduled_reminders");
         await tx.runAsync("DELETE FROM subcategories");
         await tx.runAsync("DELETE FROM categories");
         await tx.runAsync(
-          "DELETE FROM app_settings WHERE key = 'demoDataSeeded'",
+          "DELETE FROM app_settings WHERE key IN ('demoDataSeeded', 'scheduledReminderPermissionAsked')",
         );
         for (const [name, icon] of defaults) {
           const result = await tx.runAsync(
@@ -652,6 +822,7 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
       setClearDataConfirm(false);
       setSettingsModal(false);
       await load();
+      await syncScheduledReminderNotifications(db, language);
     } catch (error) {
       console.error("Failed to clear data:", error);
       Alert.alert("ডেটা মুছতে পারিনি", "আবার চেষ্টা করুন।");
@@ -748,61 +919,70 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
   };
   const categoryDeleteMessage = (() => {
     if (!categoryDeleteConfirm) return "";
-    const { expenseCount, subcategoryCount, type } = categoryDeleteConfirm;
+    const { expenseCount, subcategoryCount, categoryBudgetCount, reminderCount, type } =
+      categoryDeleteConfirm;
     if (language === "en") {
       if (type === "subcategory") {
-        return expenseCount
-          ? `This will delete ${expenseCount} expense${expenseCount === 1 ? "" : "s"} under this subcategory. This cannot be undone.`
-          : "This subcategory has no expenses. Do you still want to delete it?";
+        const effects = [
+          expenseCount ? `${expenseCount} expense${expenseCount === 1 ? "" : "s"} will be deleted` : "",
+          reminderCount ? `${reminderCount} reminder${reminderCount === 1 ? "" : "s"} will keep running without this subcategory` : "",
+        ].filter(Boolean);
+        return effects.length
+          ? `${effects.join("; ")}. This cannot be undone.`
+          : "This subcategory has no expenses or reminders. Do you still want to delete it?";
       }
-      if (expenseCount && subcategoryCount)
-        return `This will delete ${expenseCount} expense${expenseCount === 1 ? "" : "s"} and ${subcategoryCount} subcategor${subcategoryCount === 1 ? "y" : "ies"} under this category. This cannot be undone.`;
-      if (expenseCount)
-        return `This will delete ${expenseCount} expense${expenseCount === 1 ? "" : "s"} under this category. This cannot be undone.`;
-      if (subcategoryCount)
-        return `This will delete ${subcategoryCount} subcategor${subcategoryCount === 1 ? "y" : "ies"} under this category. This cannot be undone.`;
-      return "This category has no expenses or subcategories. Do you still want to delete it?";
+      const items = [
+        expenseCount ? `${expenseCount} expense${expenseCount === 1 ? "" : "s"}` : "",
+        subcategoryCount ? `${subcategoryCount} subcategor${subcategoryCount === 1 ? "y" : "ies"}` : "",
+        categoryBudgetCount ? `${categoryBudgetCount} saved category budget${categoryBudgetCount === 1 ? "" : "s"}` : "",
+        reminderCount ? `${reminderCount} scheduled reminder${reminderCount === 1 ? "" : "s"}` : "",
+      ].filter(Boolean);
+      return items.length
+        ? `This will also delete ${items.join(", ")} under this category. This cannot be undone.`
+        : "This category has no expenses, subcategories, budgets or reminders. Do you still want to delete it?";
     }
-    if (type === "subcategory")
-      return expenseCount
-        ? `এই subcategory-এর ${expenseCount}টি expense মুছে যাবে। এই কাজটি undo করা যাবে না।`
-        : "এই subcategory-এর অধীনে কোনো expense নেই। তবুও কি মুছে ফেলবেন?";
-    if (expenseCount && subcategoryCount)
-      return `এই category-এর ${expenseCount}টি expense এবং ${subcategoryCount}টি subcategory মুছে যাবে। এই কাজটি undo করা যাবে না।`;
-    if (expenseCount)
-      return `এই category-এর ${expenseCount}টি expense মুছে যাবে। এই কাজটি undo করা যাবে না।`;
-    if (subcategoryCount)
-      return `এই category-এর ${subcategoryCount}টি subcategory মুছে যাবে। এই কাজটি undo করা যাবে না।`;
-    return "এই category-এর অধীনে কোনো expense বা subcategory নেই। তবুও কি মুছে ফেলবেন?";
+    if (type === "subcategory") {
+      const effects = [
+        expenseCount ? `${expenseCount}টি expense মুছে যাবে` : "",
+        reminderCount ? `${reminderCount}টি reminder চলবে, তবে subcategory থাকবে না` : "",
+      ].filter(Boolean);
+      return effects.length
+        ? `${effects.join("; ")}। এই কাজটি undo করা যাবে না।`
+        : "এই subcategory-এর অধীনে কোনো expense বা reminder নেই। তবুও কি মুছে ফেলবেন?";
+    }
+    const items = [
+      expenseCount ? `${expenseCount}টি expense` : "",
+      subcategoryCount ? `${subcategoryCount}টি subcategory` : "",
+      categoryBudgetCount ? `${categoryBudgetCount}টি category budget` : "",
+      reminderCount ? `${reminderCount}টি scheduled reminder` : "",
+    ].filter(Boolean);
+    return items.length
+      ? `এই category-এর ${items.join(", ")} মুছে যাবে। এই কাজটি undo করা যাবে না।`
+      : "এই category-এর অধীনে কোনো expense, subcategory, budget বা reminder নেই। তবুও কি মুছে ফেলবেন?";
   })();
+  const dashboardPalette = orbitTheme(darkMode);
   return (
     <ThemeContext.Provider value={darkMode}>
       <NativeStatusBar
         barStyle={darkMode ? "light-content" : "dark-content"}
-        translucent
-        backgroundColor="transparent"
       />
       <SafeAreaView
         edges={["left", "right", "bottom"]}
-        style={[styles.safe, darkMode && darkStyles.safe]}
+        style={[styles.safe, { backgroundColor: dashboardPalette.surface }]}
       >
-        <View style={styles.container}>
-          <BlurView
-            intensity={78}
-            tint={darkMode ? "dark" : "light"}
+        <View style={[styles.container, { backgroundColor: dashboardPalette.background }]}>
+          <View
             style={{
               position: "absolute",
               top: 0,
               left: 0,
               right: 0,
               zIndex: 20,
-              height: insets.top + 70,
+              height: insets.top + ORBIT_CHROME.headerHeight,
               paddingTop: insets.top,
-              backgroundColor: darkMode
-                ? "rgba(23,26,37,0.72)"
-                : "rgba(255,255,255,0.72)",
-              borderBottomLeftRadius: 18,
-              borderBottomRightRadius: 18,
+              backgroundColor: dashboardPalette.background,
+              borderBottomLeftRadius: 0,
+              borderBottomRightRadius: 0,
               overflow: "hidden",
             }}
           >
@@ -810,7 +990,7 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
               style={[
                 styles.topBar,
                 darkMode && darkStyles.topBar,
-                { backgroundColor: "transparent" },
+                { backgroundColor: "transparent", height: ORBIT_CHROME.headerHeight, marginBottom: 0 },
               ]}
             >
               <Pressable
@@ -818,48 +998,42 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                 style={[
                   styles.topBarButton,
                   darkMode && darkStyles.topBarButton,
+                  { borderWidth: 0, backgroundColor: dashboardPalette.surface, width: 35, height: 35, borderRadius: 18 },
                 ]}
                 onPress={() => setMenuOpen(true)}
               >
                 <Ionicons
                   name="menu-outline"
                   size={22}
-                  color={darkMode ? "#f2f3f8" : "#1c2030"}
+                  color={mintTheme(darkMode).accentText}
                 />
               </Pressable>
-              <View style={styles.topBarTitle}>
-                <Text style={[styles.appName, darkMode && darkStyles.appName]}>
+              <View style={[styles.topBarTitle, { alignItems: "flex-start", paddingLeft: 12 }]}>
+                <Text style={[styles.appName, { color: dashboardPalette.text, fontSize: 18, fontWeight: "500" }]}>
                   Daily Spend
-                </Text>
-                <Text
-                  style={[
-                    styles.appSubtitle,
-                    darkMode && darkStyles.appSubtitle,
-                  ]}
-                >
-                  আপনার দৈনিক হিসাব
                 </Text>
               </View>
               <Pressable
                 style={[
                   styles.topBarButton,
                   darkMode && darkStyles.topBarButton,
+                  { borderWidth: 0, backgroundColor: dashboardPalette.surface, width: 35, height: 35, borderRadius: 18 },
                 ]}
                 onPress={toggleDarkMode}
               >
                 <Ionicons
                   name={darkMode ? "sunny-outline" : "moon-outline"}
                   size={20}
-                  color={darkMode ? "#f6c453" : PURPLE}
+                  color={mintTheme(darkMode).accentText}
                 />
               </Pressable>
             </View>
-          </BlurView>
+          </View>
           <AnimatedScrollView
             style={{ transform: [{ translateX: pageTransition }] }}
             contentContainerStyle={[
               styles.content,
-              { paddingTop: insets.top + 78 },
+              { paddingTop: insets.top + ORBIT_CHROME.headerHeight + ORBIT_CHROME.contentGap },
             ]}
             showsVerticalScrollIndicator={false}
           >
@@ -871,6 +1045,12 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                 todayTotal={todayTotal}
                 transactionCount={dashboardStats.transactionCount}
                 top={top}
+                budgetSummary={dashboardBudget}
+                onViewBudget={() => setScreen("budget")}
+                onSetBudget={() => {
+                  setOpenBudgetEditorRequested(true);
+                  setScreen("budget");
+                }}
                 onDelete={deleteExpense}
                 onEdit={openEditExpense}
                 onAddExpense={openExpense}
@@ -915,171 +1095,63 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
               />
             )}
             {screen === "reports" && <ReportsScreen expenses={expenses} />}
+            {screen === "budget" && (
+              <BudgetScreen
+                refreshKey={dataRevision}
+                onAddExpense={openExpense}
+                onBudgetSaved={refreshDashboardBudget}
+                openEditorRequested={openBudgetEditorRequested}
+                onEditorRequestHandled={() =>
+                  setOpenBudgetEditorRequested(false)
+                }
+              />
+            )}
+            {screen === "scheduled" && (
+              <ScheduledScreen
+                categories={categories}
+                subcategories={subcategories}
+                refreshKey={dataRevision}
+              />
+            )}
           </AnimatedScrollView>
-          <BlurView
-            intensity={78}
-            tint={darkMode ? "dark" : "light"}
-            style={[
-              styles.bottomNav,
-              GLASS_NAV,
-              COMPACT_NAV,
-              darkMode && darkStyles.bottomNav,
-              { left: 0, right: 0, marginHorizontal: 0, borderRadius: 0 },
-            ]}
-          >
-            {[
-              ["expenses", "receipt-outline", "সব খরচ"],
-              ["dashboard", "home-outline", "হোম"],
-              ["categories", "pricetags-outline", "ক্যাটাগরি"],
-            ].map(([key, icon, label]) => (
-              <AnimatedPressable
-                key={key}
-                ref={
-                  key === "expenses"
-                    ? expensesNavTourRef
-                    : key === "categories"
-                      ? categoryNavTourRef
-                      : undefined
-                }
-                accessibilityRole="tab"
-                accessibilityState={{ selected: screen === key }}
-                style={[styles.navButton, COMPACT_NAV_BUTTON]}
-                onPressIn={() =>
-                  Animated.spring(navScales[key], {
-                    toValue: 0.82,
-                    useNativeDriver: true,
-                    speed: 20,
-                    bounciness: 7,
-                  }).start()
-                }
-                onPressOut={() =>
-                  Animated.spring(navScales[key], {
-                    toValue: 1,
-                    useNativeDriver: true,
-                    speed: 20,
-                    bounciness: 10,
-                  }).start()
-                }
-                onPress={() => {
-                  setScreen(key as typeof screen);
-                  Animated.sequence([
-                    Animated.spring(navScales[key], {
-                      toValue: 1.22,
-                      useNativeDriver: true,
-                      speed: 18,
-                      bounciness: 8,
-                    }),
-                    Animated.spring(navScales[key], {
-                      toValue: 1,
-                      useNativeDriver: true,
-                      speed: 16,
-                      bounciness: 7,
-                    }),
-                  ]).start();
-                }}
-              >
-                <Animated.View
-                  style={[
-                    { transform: [{ scale: navScales[key] }] },
-                  ]}
-                >
-                  <Ionicons
-                    name={icon as IconName}
-                    size={19}
-                    color={
-                      screen === key
-                        ? darkMode
-                          ? "#76dda0"
-                          : PURPLE
-                        : darkMode
-                          ? "#d7d9e5"
-                          : "#62677b"
-                    }
-                  />
-                </Animated.View>
-                <Text
-                  style={[
-                    styles.navLabel,
-                    COMPACT_NAV_LABEL,
-                    screen === key && styles.activeText,
-                  ]}
-                >
-                  {label}
-                </Text>
-              </AnimatedPressable>
-            ))}
-          </BlurView>
-          <AnimatedPressable
-            ref={addTourRef}
-            accessibilityRole="button"
-            accessibilityLabel="খরচ যোগ করুন"
-            android_ripple={{ color: "#ffffff33" }}
-            style={[
-              styles.fab,
-              darkMode && darkStyles.fab,
-              { transform: [{ scale: fabScale }] },
-            ]}
-            onPressIn={() =>
-              Animated.spring(fabScale, {
-                toValue: 0.88,
-                useNativeDriver: true,
-                speed: 20,
-                bounciness: 6,
-              }).start()
-            }
-            onPressOut={() =>
-              Animated.spring(fabScale, {
-                toValue: 1,
-                useNativeDriver: true,
-                speed: 20,
-                bounciness: 6,
-              }).start()
-            }
-            onPress={openExpense}
-          >
-            <Ionicons
-              name="add"
-              size={26}
-              color={darkMode ? "#171a25" : "#fff"}
-            />
-          </AnimatedPressable>
+          <BottomNavigation screen={screen} dark={darkMode} onNavigate={setScreen}
+            expensesRef={expensesNavTourRef} categoriesRef={categoryNavTourRef}
+            onAddExpense={openExpense} addRef={addTourRef} />
           <Modal transparent visible={expenseModal} animationType="slide">
             <KeyboardAvoidingView
               behavior={Platform.OS === "ios" ? "padding" : undefined}
               style={[styles.modalBg, darkMode && darkStyles.modalBg]}
             >
-              <View
+              <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}
                 style={[
                   styles.modal,
                   darkMode && darkStyles.modal,
-                  { paddingBottom: modalBottomPadding },
+                  { paddingTop: 10, paddingBottom: modalBottomPadding, maxHeight: "90%", flexGrow: 0 },
                 ]}
               >
-                <Pressable
-                  style={styles.close}
-                  onPress={() => setExpenseModal(false)}
-                >
-                  <Text
-                    style={[styles.closeText, darkMode && darkStyles.closeText]}
-                  >
-                    ×
+                <View style={{ width: 35, height: 4, borderRadius: 2, alignSelf: "center", backgroundColor: dashboardPalette.border, marginBottom: 4 }} />
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <Text style={[styles.modalTitle, darkMode && darkStyles.modalTitle, { flex: 1, marginTop: 0, marginBottom: 0 }]}>
+                    {editingExpense ? "খরচ edit করুন" : "আজকের খরচ যোগ করুন"}
                   </Text>
-                </Pressable>
-                <Text style={[styles.eyebrow, darkMode && darkStyles.eyebrow]}>
-                  নতুন লেনদেন
-                </Text>
-                <Text
-                  style={[styles.modalTitle, darkMode && darkStyles.modalTitle]}
-                >
-                  {editingExpense ? "খরচ edit করুন" : "আজকের খরচ যোগ করুন"}
-                </Text>
-                <Text style={[styles.label, darkMode && darkStyles.label]}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={language === "en" ? "Close" : "বন্ধ করুন"}
+                    hitSlop={4}
+                    style={{ width: 40, height: 40, alignItems: "center", justifyContent: "center", marginRight: -8 }}
+                    onPress={() => setExpenseModal(false)}
+                  >
+                    <Ionicons name="close" size={24} color={dashboardPalette.muted} />
+                  </Pressable>
+                </View>
+                <Text style={[styles.label, darkMode && darkStyles.label, { textAlign: "center", fontSize: 11, marginTop: 0, marginBottom: 0 }]}>
                   টাকার পরিমাণ
                 </Text>
-                <TextInput
+                <CenteredAmountInput
                   style={[
                     styles.input,
                     darkMode && darkStyles.input,
+                    { backgroundColor: "transparent", borderWidth: 0, textAlign: "center", fontSize: 30, height: 60, paddingVertical: 0, marginBottom: 4, fontFamily: "DMSans-500", fontWeight: "normal", includeFontPadding: false },
                     amountError && styles.inputError,
                     amountError && darkMode && darkStyles.inputError,
                   ]}
@@ -1088,8 +1160,9 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                     setAmount(value);
                     if (amountError) setAmountError("");
                   }}
-                  placeholder={language === "en" ? "Tk 0" : "৳ 0"}
-                  placeholderTextColor={darkMode ? "#a7acc0" : "#8a8fa3"}
+                  placeholder="0"
+                  accessibilityLabel={language === "en" ? "Amount" : "টাকার পরিমাণ"}
+                  placeholderTextColor={darkMode ? "#b9b2a4" : "#706b61"}
                   keyboardType="numeric"
                   autoFocus
                 />
@@ -1129,10 +1202,10 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                         <CategoryIcon
                           icon={c.icon}
                           size={16}
-                          color={darkMode ? "#c3f0d2" : PURPLE}
+                          color={selected === c.id ? "#fff" : dashboardPalette.text}
                         />
                         <Text
-                          style={darkMode ? darkStyles.chipText : undefined}
+                          style={{ color: selected === c.id ? "#fff" : dashboardPalette.text, fontSize: 12 }}
                         >
                           {c.name}
                         </Text>
@@ -1145,14 +1218,13 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                 </Text>
                 <View
                   style={[
-                    styles.subcategorySurface,
-                    darkMode && darkStyles.subcategorySurface,
+                    { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 },
                   ]}
                 >
                   <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
-                    style={styles.chips}
+                    style={[styles.chips, { flex: 1 }]}
                     contentContainerStyle={styles.subcategorySurfaceContent}
                   >
                   {subcategories
@@ -1175,7 +1247,7 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                         ]}
                       >
                         <Text
-                          style={darkMode ? darkStyles.chipText : undefined}
+                          style={{ color: selectedSubcategory === s.id ? "#fff" : dashboardPalette.text, fontSize: 12 }}
                         >
                           {s.name}
                         </Text>
@@ -1207,32 +1279,23 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                       width: 28,
                       height: 28,
                       borderRadius: 14,
-                      backgroundColor: darkMode ? "#164b35" : "#e5f4eb",
+                      backgroundColor: MINT,
+                      marginLeft: 4,
                       alignItems: "center",
                       justifyContent: "center",
-                      marginLeft: 4,
                       alignSelf: "center",
                       transform: [{ scale: subcategoryScale }],
                     }}
                   >
-                    <Text
-                      style={{
-                        color: PURPLE,
-                        fontSize: 20,
-                        lineHeight: 22,
-                        fontWeight: "500",
-                      }}
-                    >
-                      ＋
-                    </Text>
+                    <Ionicons name="add" size={20} color={MINT_INK} />
                   </AnimatedPressable>
                   </ScrollView>
                 </View>
-                <Text style={[styles.label, darkMode && darkStyles.label]}>
-                  তারিখ
-                </Text>
+                <View style={{ backgroundColor: dashboardPalette.surface, borderRadius: 13, paddingHorizontal: 12, marginTop: 12 }}>
+<View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                  <Text style={[styles.label, darkMode && darkStyles.label, { width: 48, fontSize: 12 }]}>তারিখ</Text>
                 <Pressable
-                  style={[styles.dateButton, darkMode && darkStyles.dateButton]}
+                  style={[styles.dateButton, darkMode && darkStyles.dateButton, { flex: 1, backgroundColor: "transparent", paddingHorizontal: 0 }]}
                   onPress={() => setDatePickerOpen(true)}
                 >
                   <Text
@@ -1249,9 +1312,10 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                   <Ionicons
                     name="calendar-outline"
                     size={18}
-                    color={darkMode ? "#a8e6bd" : PURPLE}
+                    color={darkMode ? "#edc176" : PURPLE}
                   />
                 </Pressable>
+                </View>
                 {datePickerOpen && (
                   <AppDatePicker
                     value={expenseDate}
@@ -1259,18 +1323,16 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                     onClose={() => setDatePickerOpen(false)}
                   />
                 )}
-                <Text style={[styles.label, darkMode && darkStyles.label]}>
-                  নোট{" "}
-                  <Text
-                    style={[styles.optional, darkMode && darkStyles.optional]}
-                  >
-                    (ঐচ্ছিক)
-                  </Text>
+<View style={{ flexDirection: "row", alignItems: "center", gap: 10, borderTopWidth: 1, borderTopColor: dashboardPalette.border }}>
+                <Text style={[styles.label, darkMode && darkStyles.label, { width: 48, fontSize: 12 }]}>
+                  নোট
+
                 </Text>
                 <TextInput
                   style={[
                     styles.input,
                     darkMode && darkStyles.input,
+                    { flex: 1, backgroundColor: "transparent", paddingHorizontal: 0, fontSize: 12 },
                     noteError && styles.inputError,
                     noteError && darkMode && darkStyles.inputError,
                   ]}
@@ -1285,16 +1347,18 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                       ? "e.g. lunch at the office"
                       : "যেমন: অফিসে দুপুরের খাবার"
                   }
-                  placeholderTextColor={darkMode ? "#a7acc0" : "#8a8fa3"}
+                  placeholderTextColor={darkMode ? "#b9b2a4" : "#706b61"}
                 />
+                </View>
                 {noteError ? (
                   <Text style={[styles.inputErrorText, darkMode && darkStyles.inputErrorText]}>
                     {noteError}
                   </Text>
                 ) : null}
+                </View>
                 <AnimatedPressable
                   style={[
-                    styles.primary,
+                    styles.primary, darkMode && darkStyles.primary,
                     savingExpense && styles.primaryDisabled,
                     { transform: [{ scale: saveScale }] },
                   ]}
@@ -1320,12 +1384,12 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                   {savingExpense ? (
                     <ActivityIndicator size="small" color="#fff" />
                   ) : (
-                    <Text style={styles.primaryText}>
+                    <Text style={[styles.primaryText, darkMode && darkStyles.primaryText]}>
                       {editingExpense ? "পরিবর্তন সেভ করুন" : "খরচ সেভ করুন"}
                     </Text>
                   )}
                 </AnimatedPressable>
-              </View>
+              </ScrollView>
             </KeyboardAvoidingView>
           </Modal>
           <Modal transparent visible={categoryModal} animationType="slide">
@@ -1374,7 +1438,7 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                   placeholder={
                     language === "en" ? "e.g. Education" : "যেমন: শিক্ষা"
                   }
-                  placeholderTextColor={darkMode ? "#a7acc0" : "#8a8fa3"}
+                  placeholderTextColor={darkMode ? "#b9b2a4" : "#706b61"}
                   autoFocus
                 />
                 {categoryError ? (
@@ -1393,14 +1457,14 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                       style={[
                         styles.iconChoice,
                         darkMode && {
-                          backgroundColor: DARK_MODAL_SURFACE,
-                          borderColor: "#383e55",
+                          backgroundColor: MINT_MODAL_SURFACE,
+                          borderColor: "#454035",
                         },
                         newCategoryIcon === icon &&
                           (darkMode
                             ? {
-                                backgroundColor: "#164b35",
-                                borderColor: "#62d194",
+                                backgroundColor: "#48391f",
+                                borderColor: "#dfa43e",
                               }
                             : styles.iconChoiceActive),
                       ]}
@@ -1408,14 +1472,14 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                       <CategoryIcon
                         icon={icon}
                         size={22}
-                        color={darkMode ? "#c3f0d2" : PURPLE}
+                        color={darkMode ? "#edc176" : PURPLE}
                       />
                     </Pressable>
                   ))}
                 </View>
                 <AnimatedPressable
                   style={[
-                    styles.primary,
+                    styles.primary, darkMode && darkStyles.primary,
                     savingCategory && styles.primaryDisabled,
                     { transform: [{ scale: categoryAddScale }] },
                   ]}
@@ -1441,7 +1505,7 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                   {savingCategory ? (
                     <ActivityIndicator size="small" color="#fff" />
                   ) : (
-                    <Text style={styles.primaryText}>
+                    <Text style={[styles.primaryText, darkMode && darkStyles.primaryText]}>
                       {editingCategory ? "পরিবর্তন সেভ করুন" : "ক্যাটাগরি যোগ করুন"}
                     </Text>
                   )}
@@ -1475,7 +1539,7 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                         ?.icon || "sparkles-outline"
                     }
                     size={18}
-                    color={darkMode ? "#a8e6bd" : PURPLE}
+                    color={darkMode ? "#edc176" : PURPLE}
                   />
                   <Text
                     style={[styles.eyebrow, darkMode && darkStyles.eyebrow]}
@@ -1510,7 +1574,7 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                       <Pressable
                         key={s.id}
                         style={{
-                          backgroundColor: darkMode ? "#2b3042" : "#efedff",
+                          backgroundColor: darkMode ? "#454035" : "#f7ead0",
                           borderRadius: 18,
                           paddingVertical: 8,
                           paddingHorizontal: 12,
@@ -1522,7 +1586,7 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                       >
                         <Text
                           style={{
-                            color: darkMode ? "#eef0fb" : PURPLE,
+                            color: darkMode ? "#f5f0e6" : PURPLE,
                             fontSize: 13,
                             fontWeight: "600",
                           }}
@@ -1551,7 +1615,7 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                   placeholder={
                     language === "en" ? "e.g. Breakfast" : "যেমন: Breakfast"
                   }
-                  placeholderTextColor={darkMode ? "#a7acc0" : "#8a8fa3"}
+                  placeholderTextColor={darkMode ? "#b9b2a4" : "#706b61"}
                   autoFocus
                 />
                 {subcategoryError ? (
@@ -1561,7 +1625,7 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                 ) : null}
                 <AnimatedPressable
                   style={[
-                    styles.primary,
+                    styles.primary, darkMode && darkStyles.primary,
                     savingSubcategory && styles.primaryDisabled,
                     { transform: [{ scale: subcategoryAddScale }] },
                   ]}
@@ -1587,7 +1651,7 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                   {savingSubcategory ? (
                     <ActivityIndicator size="small" color="#fff" />
                   ) : (
-                    <Text style={styles.primaryText}>
+                    <Text style={[styles.primaryText, darkMode && darkStyles.primaryText]}>
                       {editingSubcategory ? "পরিবর্তন সেভ করুন" : "＋ যোগ করুন"}
                     </Text>
                   )}
@@ -1632,7 +1696,7 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                 </Text>
                 <Pressable
                   style={{
-                    backgroundColor: darkMode ? "#2b3042" : "#f4f5fa",
+                    backgroundColor: darkMode ? "#454035" : "#efebe2",
                     borderRadius: 13,
                     padding: 14,
                     flexDirection: "row",
@@ -1649,7 +1713,7 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                   <Ionicons
                     name="create-outline"
                     size={21}
-                    color={darkMode ? "#a8e6bd" : PURPLE}
+                    color={darkMode ? "#edc176" : PURPLE}
                   />
                   <Text style={[styles.rowTitle, darkMode && darkStyles.rowTitle]}>
                     এডিট করুন
@@ -1673,7 +1737,7 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                   }}
                 >
                   <Ionicons name="trash-outline" size={21} color="#df5f65" />
-                  <Text style={{ color: "#df5f65", fontSize: 14, fontWeight: "700" }}>
+                  <Text style={{ color: "#df5f65", fontSize: 14, fontWeight: "600" }}>
                     মুছে ফেলুন
                   </Text>
                 </Pressable>
@@ -1692,9 +1756,9 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                   styles.modal,
                   darkMode && darkStyles.modal,
                   darkMode && {
-                    backgroundColor: "#24283a",
+                    backgroundColor: MINT_MODAL_SURFACE,
                     borderWidth: 1,
-                    borderColor: "#414965",
+                    borderColor: "#454035",
                   },
                   { paddingBottom: modalBottomPadding },
                 ]}
@@ -1715,7 +1779,7 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                 <Text
                   style={[styles.modalTitle, darkMode && darkStyles.modalTitle]}
                 >
-                  Settings
+                  {language === "en" ? "Settings" : "সেটিংস"}
                 </Text>
                 <View
                   style={{
@@ -1725,15 +1789,22 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                     paddingVertical: 14,
                   }}
                 >
-                  <View>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 11 }}>
+                    <Ionicons
+                      name="color-palette-outline"
+                      size={20}
+                      color={darkMode ? "#edc176" : PURPLE}
+                    />
+                    <View>
                     <Text
                       style={[styles.rowTitle, darkMode && darkStyles.rowTitle]}
                     >
-                      Appearance
+                      {language === "en" ? "Appearance" : "থিম"}
                     </Text>
                     <Text style={[styles.muted, darkMode && darkStyles.muted]}>
-                      Light অথবা dark mode
+                      {language === "en" ? "Light or dark mode" : "লাইট বা ডার্ক মোড"}
                     </Text>
+                    </View>
                   </View>
                   <Pressable
                     style={[
@@ -1753,15 +1824,22 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                   </Pressable>
                 </View>
                 <View style={styles.settingsRow}>
-                  <View>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 11 }}>
+                    <Ionicons
+                      name="language-outline"
+                      size={20}
+                      color={darkMode ? "#edc176" : PURPLE}
+                    />
+                    <View>
                     <Text
                       style={[styles.rowTitle, darkMode && darkStyles.rowTitle]}
                     >
-                      Language
+                      {language === "en" ? "Language" : "ভাষা"}
                     </Text>
                     <Text style={[styles.muted, darkMode && darkStyles.muted]}>
-                      Choose app language
+                      {language === "en" ? "Choose app language" : "অ্যাপের ভাষা বেছে নিন"}
                     </Text>
+                    </View>
                   </View>
                   <View
                     style={[
@@ -1819,6 +1897,38 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                     </Pressable>
                   </View>
                 </View>
+                <Pressable
+                  accessibilityRole="button"
+                  style={({ pressed }) => [
+                    styles.settingsRow,
+                    { opacity: pressed ? 0.72 : 1 },
+                  ]}
+                  onPress={() => {
+                    setSettingsModal(false);
+                    setBackupModal(true);
+                  }}
+                >
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 11 }}>
+                    <Ionicons
+                      name="cloud-download-outline"
+                      size={20}
+                      color={darkMode ? "#edc176" : PURPLE}
+                    />
+                    <View>
+                      <Text style={[styles.rowTitle, darkMode && darkStyles.rowTitle]}>
+                        ডেটা ব্যাকআপ
+                      </Text>
+                      <Text style={[styles.muted, darkMode && darkStyles.muted]}>
+                        আপনার তথ্য export বা restore করুন
+                      </Text>
+                    </View>
+                  </View>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={18}
+                    color={darkMode ? "#b9b2a4" : "#706b61"}
+                  />
+                </Pressable>
                 {__DEV__ && (
                   <Pressable
                     accessibilityRole="button"
@@ -1844,13 +1954,13 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                     {demoLoading ? (
                       <ActivityIndicator
                         size="small"
-                        color={darkMode ? "#a8e6bd" : PURPLE}
+                        color={darkMode ? "#edc176" : PURPLE}
                       />
                     ) : (
                       <Ionicons
                         name="flask-outline"
                         size={20}
-                        color={darkMode ? "#a8e6bd" : PURPLE}
+                        color={darkMode ? "#edc176" : PURPLE}
                       />
                     )}
                   </Pressable>
@@ -1872,7 +1982,7 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                     style={{
                       color: "#df5f65",
                       fontSize: 14,
-                      fontWeight: "700",
+                      fontWeight: "600",
                     }}
                   >
                     সব ডেটা মুছুন
@@ -2042,8 +2152,8 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                     darkMode && darkStyles.confirmMessage,
                   ]}
                 >
-                  সব expense, custom category এবং subcategory মুছে যাবে। এই
-                  কাজটি undo করা যাবে না।
+                  সব expense, custom category, subcategory ও monthly budget
+                  মুছে যাবে। এই কাজটি undo করা যাবে না।
                 </Text>
                 <View style={styles.confirmActions}>
                   <Pressable
@@ -2114,7 +2224,7 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                   <Ionicons
                     name="home-outline"
                     size={20}
-                    color={darkMode ? "#a8e6bd" : PURPLE}
+                    color={darkMode ? "#edc176" : PURPLE}
                     style={[styles.drawerItemIcon, darkMode && darkStyles.drawerItemIcon]}
                   />
                   <Text
@@ -2143,7 +2253,7 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                   <Ionicons
                     name="receipt-outline"
                     size={20}
-                    color={darkMode ? "#a8e6bd" : PURPLE}
+                    color={darkMode ? "#edc176" : PURPLE}
                     style={[styles.drawerItemIcon, darkMode && darkStyles.drawerItemIcon]}
                   />
                   <Text
@@ -2172,7 +2282,7 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                   <Ionicons
                     name="pricetags-outline"
                     size={20}
-                    color={darkMode ? "#a8e6bd" : PURPLE}
+                    color={darkMode ? "#edc176" : PURPLE}
                     style={[styles.drawerItemIcon, darkMode && darkStyles.drawerItemIcon]}
                   />
                   <Text
@@ -2201,7 +2311,7 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                   <Ionicons
                     name="bar-chart-outline"
                     size={20}
-                    color={darkMode ? "#a8e6bd" : PURPLE}
+                    color={darkMode ? "#edc176" : PURPLE}
                     style={[styles.drawerItemIcon, darkMode && darkStyles.drawerItemIcon]}
                   />
                   <Text
@@ -2211,6 +2321,64 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                     ]}
                   >
                     রিপোর্ট
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.drawerItem,
+                    darkMode && darkStyles.drawerItem,
+                    screen === "budget" &&
+                      (darkMode
+                        ? darkStyles.drawerItemActive
+                        : styles.drawerItemActive),
+                  ]}
+                  onPress={() => {
+                    setScreen("budget");
+                    setMenuOpen(false);
+                  }}
+                >
+                  <Ionicons
+                    name="wallet-outline"
+                    size={20}
+                    color={darkMode ? "#edc176" : PURPLE}
+                    style={[styles.drawerItemIcon, darkMode && darkStyles.drawerItemIcon]}
+                  />
+                  <Text
+                    style={[
+                      styles.drawerItemText,
+                      darkMode && darkStyles.drawerItemText,
+                    ]}
+                  >
+                    বাজেট
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.drawerItem,
+                    darkMode && darkStyles.drawerItem,
+                    screen === "scheduled" &&
+                      (darkMode
+                        ? darkStyles.drawerItemActive
+                        : styles.drawerItemActive),
+                  ]}
+                  onPress={() => {
+                    setScreen("scheduled");
+                    setMenuOpen(false);
+                  }}
+                >
+                  <Ionicons
+                    name="calendar-outline"
+                    size={20}
+                    color={darkMode ? "#edc176" : PURPLE}
+                    style={[styles.drawerItemIcon, darkMode && darkStyles.drawerItemIcon]}
+                  />
+                  <Text
+                    style={[
+                      styles.drawerItemText,
+                      darkMode && darkStyles.drawerItemText,
+                    ]}
+                  >
+                    নির্ধারিত
                   </Text>
                 </Pressable>
                 <View
@@ -2229,7 +2397,7 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                   <Ionicons
                     name="settings-outline"
                     size={20}
-                    color={darkMode ? "#b9b1ff" : PURPLE}
+                    color={darkMode ? "#edc176" : PURPLE}
                     style={[styles.drawerItemIcon, darkMode && darkStyles.drawerItemIcon]}
                   />
                   <Text
@@ -2238,12 +2406,53 @@ export function ExpenseApp({ splashVisible }: { splashVisible: boolean }) {
                       darkMode && darkStyles.drawerItemText,
                     ]}
                   >
-                    Settings
+                    {language === "en" ? "Settings" : "সেটিংস"}
                   </Text>
                 </Pressable>
               </View>
             </View>
           </Modal>
+          <ReminderReviewModal
+            reminder={reminderReview}
+            categories={categories}
+            subcategories={subcategories}
+            saving={savingReminderExpense}
+            onClose={closeReminderReview}
+            onAddExpense={(draft) => void addReminderExpense(draft)}
+            onSkip={() => void skipReminderOccurrence()}
+          />
+          <BackupModal
+            visible={backupModal}
+            dark={darkMode}
+            language={language}
+            onClose={() => setBackupModal(false)}
+            onRestored={async () => {
+              await load();
+              const restoredSettings = await db.getAllAsync<{
+                key: string;
+                value: string;
+              }>("SELECT key, value FROM app_settings WHERE key IN (?, ?)", [
+                "language",
+                "theme",
+              ]);
+              if (restoredSettings.some((item) => item.key === "language" && item.value === "bn"))
+                setLanguage("bn");
+              else setLanguage("en");
+              setDarkMode(
+                restoredSettings.some(
+                  (item) => item.key === "theme" && item.value === "dark",
+                ),
+              );
+              await syncScheduledReminderNotifications(
+                db,
+                restoredSettings.some(
+                  (item) => item.key === "language" && item.value === "bn",
+                )
+                  ? "bn"
+                  : "en",
+              );
+            }}
+          />
           <FeatureTourModal
             visible={showFeatureTour}
             onFinish={finishFeatureTour}

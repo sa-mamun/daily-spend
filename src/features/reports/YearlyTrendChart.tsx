@@ -37,11 +37,11 @@ export function YearlyTrendChart({
   const path = points.map((point, index) =>
     `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`,
   ).join(" ");
-  const gridColor = dark ? "#343c52" : "#e7eaf1";
-  const labelColor = dark ? "#b7bbce" : "#62677b";
-  const mutedColor = dark ? "#a7acc0" : "#8a8fa3";
-  const lineColor = dark ? "#76dda0" : "#087443";
-  const surfaceColor = dark ? "#202536" : "#fff";
+  const gridColor = dark ? "#454035" : "#e8e4db";
+  const labelColor = dark ? "#b9b2a4" : "#706b61";
+  const mutedColor = dark ? "#b9b2a4" : "#706b61";
+  const lineColor = "#dfa43e";
+  const surfaceColor = dark ? "#2a2924" : "#fff";
 
   return (
     <ScrollView
@@ -53,7 +53,7 @@ export function YearlyTrendChart({
         <Line x1={left} y1={top + 2} x2={width - right} y2={top + 2} stroke={gridColor} strokeWidth={1} />
         <Line x1={left} y1={(top + baseline) / 2} x2={width - right} y2={(top + baseline) / 2} stroke={gridColor} strokeWidth={1} />
         <Line x1={left} y1={baseline} x2={width - right} y2={baseline} stroke={gridColor} strokeWidth={1} />
-        <Path d={`${path} L ${width - right} ${baseline} L ${left} ${baseline} Z`} fill={dark ? "#76dda01f" : "#08744316"} />
+        <Path d={`${path} L ${width - right} ${baseline} L ${left} ${baseline} Z`} fill={dark ? "#dfa43e1f" : "#dfa43e26"} />
         <Path d={path} fill="none" stroke={lineColor} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
         {points.map((point) => (
           <React.Fragment key={point.label}>
@@ -62,7 +62,7 @@ export function YearlyTrendChart({
               y={Math.max(12, point.y - 10)}
               fill={labelColor}
               fontSize={9}
-              fontWeight="700"
+              fontWeight="600"
               textAnchor="middle"
             >
               {point.value ? chartAmount(point.value, language) : "—"}

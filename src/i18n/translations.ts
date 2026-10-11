@@ -1,6 +1,7 @@
 const englishTranslations: Record<string, string> = {
   "আপনার দৈনিক হিসাব": "Your daily finances",
   "সব খরচ": "All expenses",
+  "নির্ধারিত": "Scheduled",
   হোম: "Home",
   "খরচ যোগ করুন": "Add expense",
   খাবার: "Food",
@@ -51,6 +52,7 @@ const englishTranslations: Record<string, string> = {
   "Light অথবা dark mode": "Light or dark mode",
   "সব ডেটা মুছুন": "Clear all data",
   "এডিট করুন": "Edit",
+  এডিট: "Edit",
   "খরচ মুছে ফেলবেন?": "Delete this expense?",
   "এই expense record আর ফিরে পাওয়া যাবে না।":
     "This expense record cannot be recovered.",
@@ -61,6 +63,8 @@ const englishTranslations: Record<string, string> = {
   "সব ডেটা মুছে ফেলবেন?": "Clear all data?",
   "সব expense, custom category এবং subcategory মুছে যাবে। এই কাজটি undo করা যাবে না।":
     "All expenses, custom categories and subcategories will be deleted. This cannot be undone.",
+  "সব expense, custom category, subcategory ও monthly budget মুছে যাবে। এই কাজটি undo করা যাবে না।":
+    "All expenses, custom categories, subcategories and monthly budgets will be deleted. This cannot be undone.",
   "সব মুছুন": "Clear all",
   "এই মাসে মোট খরচ": "Total this month",
   "গত মাসের তুলনায় —": "Compared with last month —",
@@ -177,6 +181,104 @@ const englishTranslations: Record<string, string> = {
   "Demo data যোগ হয়েছে": "Demo data loaded",
   "Demo data আগে থেকেই আছে": "Demo data already exists",
   "আরও দেখুন": "Load more",
+  "ডেটা ও গোপনীয়তা": "Data & privacy",
+  "ব্যাকআপ ও রিস্টোর": "Backup & restore",
+  "আপনার তথ্য এই ডিভাইসেই থাকে। Backup file আপনার বেছে নেওয়া জায়গায় সংরক্ষিত হবে।":
+    "Your data stays on this device. The backup file is saved to a location you choose.",
+  "ব্যাকআপ তৈরি করুন": "Create a backup",
+  "এখনও কোনো backup তৈরি হয়নি": "No backup created yet",
+  "এতে expense, category, subcategory, budget, reminder history এবং app-এর appearance ও language setting থাকবে।":
+    "Includes expenses, categories, subcategories, budgets, reminder history, and app appearance and language settings.",
+  "ফাইল থেকে restore করুন": "Restore from file",
+  "Daily Spend JSON backup file বেছে নিন": "Choose a Daily Spend JSON backup file",
+  "Backup file বেছে নিন": "Choose backup file",
+  "এটি বর্তমান সব expense ও category বদলে দেবে। App থেকে এই পরিবর্তন undo করা যাবে না।":
+    "This replaces all current expenses and categories. This cannot be undone from the app.",
+  "বুঝেছি, এটি আমার বর্তমান data বদলে দেবে":
+    "I understand this will replace my current data",
+  "বর্তমান data বদলে restore করুন": "Replace current data",
+  "Restore বাতিল করুন": "Cancel restore",
+  "ডেটা ব্যাকআপ": "Data backup",
+  "আপনার তথ্য export বা restore করুন": "Export or restore your data",
+  বাজেট: "Budget",
+  "ক্যাটাগরি বাজেট": "Category budgets",
+  "নির্দিষ্ট খরচের সীমা": "Limits for selected categories",
+  "বাজেট যোগ": "Add budget",
+  "ক্যাটাগরি নির্বাচন": "Choose a category",
+  "ক্যাটাগরি বাজেট যোগ": "Add category budget",
+  "ক্যাটাগরি বাজেট এডিট": "Edit category budget",
+  "মাসিক মোট": "Monthly total",
+  "যেমন: খাবারের জন্য ৳৮,০০০": "Example: ৳8,000 for food",
+  "আগে একটি category তৈরি করুন।": "Create a category first.",
+  "In-app warning": "In-app warning",
+  "অ্যাপের ভেতরের সতর্কতা": "In-app warning",
+  "৮০% ও budget ছাড়ালে দেখাবে": "Shown at 80% and when over budget",
+  "৮০% হলে notification": "Notify at 80%",
+  "১০০% হলে notification": "Notify at 100%",
+  "এই মাসে একবার": "Once this month",
+  "সীমা ছুঁলে এই মাসে একবার": "Once when the limit is reached this month",
+  "Notification না দিলেও in-app warning চলবে। Category মুছলে এই category-র সব মাসের budget-ও মুছে যাবে।":
+    "In-app warnings work even when notifications are off. Deleting a category also deletes its budgets for every month.",
+  "একটি category নির্বাচন করুন।": "Choose a category.",
+  "এখনো কোনো ক্যাটাগরি বাজেট নেই।": "No category budgets yet.",
+  "বাজেটের অগ্রগতি": "Budget progress",
+  "বাজেট মুছে ফেলবেন?": "Remove this budget?",
+  "ক্যাটাগরি বাজেট মুছে ফেলবেন?": "Remove category budget?",
+  "বাজেট মুছুন": "Remove budget",
+  "Expense data মুছবে না।": "Your expense records will not be deleted.",
+  "বাজেট মুছতে পারিনি": "Could not remove budget",
+  "নোটিফিকেশন বন্ধ আছে": "Notifications are off",
+  "বাজেট alert পেতে device settings থেকে notification অনুমতি দিন। App-এর ভেতরের warning চালু থাকবে।":
+    "Allow notifications in device settings to receive budget alerts. In-app warnings will still work.",
+  "নোটিফিকেশন চালু করা যায়নি": "Could not enable notifications",
+  "বাজেট সতর্কতা": "Budget alert",
+  "৮০% ও over budget হলে warning দেখাবে": "Show a warning at 80% and over budget",
+  "মাসিক বাজেট": "Monthly budget",
+  "খরচের সীমা ঠিক করুন": "Set a spending limit",
+  "চলতি মাস": "This month",
+  "মাসিক বাজেট সেট করা নেই": "No monthly budget set",
+  "একটি মাসিক সীমা যোগ করলে খরচের অগ্রগতি ও বাকি টাকা এখানে দেখা যাবে।":
+    "Set a monthly limit to track your spending and remaining balance here.",
+  "মাসিক বাজেট সেট করুন": "Set monthly budget",
+  "মাসিক সীমা": "Monthly limit",
+  "বাজেট এডিট করুন": "Edit budget",
+  "খরচের সর্বোচ্চ সীমা লিখুন": "Enter your spending limit",
+  "বাজেটের পরিমাণ": "Budget amount",
+  "সঠিক budget amount লিখুন।": "Enter a valid budget amount.",
+  "Budget সর্বোচ্চ ১০০ কোটি টাকা হতে পারবে।":
+    "Budget cannot exceed Tk 1,000,000,000.",
+  "Budget save হয়নি। আবার চেষ্টা করুন।": "Budget could not be saved. Try again.",
+  "এই মাসের বাজেটের অগ্রগতি": "This month's budget progress",
+  "এই মাসে খরচ": "Spent this month",
+  ব্যবহৃত: "used",
+  বাকি: "Left",
+  "বেশি খরচ": "Over by",
+  "এই মাসের বাজেট অতিক্রম হয়েছে।": "You've exceeded this month's budget.",
+  "এই মাসের বাজেটের অন্তত ৮০% খরচ হয়েছে।":
+    "You've used at least 80% of this month's budget.",
+  "এই মাসের বাজেট সেভ হয়েছে।": "This month's budget is saved.",
+  "ক্যাটাগরি অনুযায়ী খরচ": "Spending by category",
+  "এই মাসের খরচের ভাগ": "This month's spending breakdown",
+  "এই মাসে এখনো কোনো খরচ নেই।": "No expenses this month yet.",
+  "এই budget শুধু ": "This budget applies only to ",
+  "-এর জন্য প্রযোজ্য হবে। পরে যেকোনো সময় বদলাতে পারবেন।":
+    ". You can change it at any time.",
+  "বাজেট সেভ করুন": "Save budget",
+  "সেভ হচ্ছে…": "Saving…",
+  "Backup file তৈরি হয়েছে। নিরাপদ কোনো জায়গায় একটি কপি রাখুন।":
+    "Backup file created. Keep a copy somewhere safe.",
+  "Backup তৈরি করা যায়নি। নির্বাচিত folder দেখে আবার চেষ্টা করুন।":
+    "Could not create the backup. Check the selected folder and try again.",
+  "এই backup file-টি restore করার জন্য অতিরিক্ত বড়।":
+    "This backup file is too large to restore.",
+  "এই file সঠিক নয় বা backup version সমর্থিত নয়। আপনার বর্তমান data অপরিবর্তিত আছে।":
+    "This file is invalid or its backup version is unsupported. Your current data is unchanged.",
+  "Backup restore হয়েছে। Expense, category, budget ও reminder আপডেট করা হয়েছে।":
+    "Backup restored. Expenses, categories, budgets and reminders have been refreshed.",
+  "Restore করা যায়নি। বর্তমান data অপরিবর্তিত আছে। অন্য backup file দিয়ে চেষ্টা করুন।":
+    "Restore failed. Your current data is unchanged. Try another backup file.",
+  "Backup তৈরি হচ্ছে…": "Creating backup…",
+  "Backup restore হচ্ছে…": "Restoring backup…",
 };
 
 export const translateText = (value: string, language: "en" | "bn") => {

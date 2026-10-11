@@ -22,10 +22,10 @@ export function Stat({
   const compactEnglish = compact && language === "en";
   return (
     <View style={[styles.stat, CARD_RADIUS, dark && darkStyles.stat]}>
-      <View style={[styles.statIcon, dark && darkStyles.statIcon]}>
-        <Ionicons name={icon} size={18} color={dark ? "#f2f3f8" : PURPLE} />
-      </View>
-      <View style={styles.statCopy}>
+      <View style={styles.statHead}>
+        <View style={[styles.statIcon, dark && darkStyles.statIcon]}>
+          <Ionicons name={icon} size={17} color={dark ? "#edc176" : PURPLE} />
+        </View>
         <Text
           style={[
             styles.muted,
@@ -38,10 +38,8 @@ export function Stat({
         >
           {label}
         </Text>
-        <Text style={[styles.statValue, dark && darkStyles.statValue]} numberOfLines={2}>
-          {value}
-        </Text>
       </View>
+      <Text style={[styles.statValue, dark && darkStyles.statValue]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{value}</Text>
     </View>
   );
 }
@@ -51,30 +49,29 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#fff",
     borderRadius: 15,
-    padding: 8,
+    paddingVertical: 11,
+    paddingHorizontal: 7,
     borderWidth: 1,
-    borderColor: "#eceef5",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
+    borderColor: "#e8e4db",
   },
+  statHead: { flexDirection: "row", alignItems: "center", gap: 5, minHeight: 31 },
   statIcon: {
-    width: 28,
-    height: 28,
+    width: 26,
+    height: 26,
     borderRadius: 8,
-    backgroundColor: "#e5f4eb",
+    backgroundColor: "#f7ead0",
     alignItems: "center",
     justifyContent: "center",
   },
   statCopy: { flex: 1, minWidth: 0 },
-  muted: { color: "#8a8fa3", fontSize: 11 },
-  statCompactLabel: { fontSize: 10 },
-  statValue: { color: "#1c2030", fontSize: 12, fontWeight: "700", marginTop: 2 },
+  muted: { color: "#706b61", fontSize: 11, flex: 1, minWidth: 0 },
+  statCompactLabel: { fontSize: 11 },
+  statValue: { color: "#181713", fontSize: 14, fontWeight: "600", marginTop: 5 },
 });
 
 const darkStyles = StyleSheet.create({
-  stat: { backgroundColor: "#202536", borderColor: "#343c52" },
-  statIcon: { backgroundColor: "#1b5a40" },
-  muted: { color: "#a7acc0" },
-  statValue: { color: "#f2f3f8" },
+  stat: { backgroundColor: "#2a2924", borderColor: "#454035" },
+  statIcon: { backgroundColor: "#48391f" },
+  muted: { color: "#b9b2a4" },
+  statValue: { color: "#f5f0e6" },
 });

@@ -13,6 +13,8 @@ import { ThemeContext, PURPLE } from "../theme/constants";
 import { CategoryIcon } from "./CategoryIcon";
 import type { Expense, IconName } from "../types/models";
 import { dateText, taka } from "../utils/dates";
+import { orbitTheme } from "../features/dashboard/orbitTheme";
+import { EmptyStateAction } from "./EmptyStateAction";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -28,6 +30,7 @@ function ExpenseRow({
   expense,
   dark,
   surfaceColor,
+  appearance,
   isLast,
   onDelete,
   onEdit,
@@ -35,11 +38,13 @@ function ExpenseRow({
   expense: Expense;
   dark: boolean;
   surfaceColor?: string;
+  appearance?: "orbit";
   isLast?: boolean;
   onDelete: (id: number) => void;
   onEdit: (expense: Expense) => void;
 }) {
   const { language } = useContext(LanguageContext);
+  const orbit = appearance === "orbit" ? orbitTheme(dark) : null;
   const translateX = useRef(new Animated.Value(0)).current;
   const editScale = useRef(new Animated.Value(1)).current;
   const panResponder = useRef(
@@ -60,7 +65,7 @@ function ExpenseRow({
 
   return (
     <View style={styles.rowClip}>
-      <View style={styles.deleteSurface}>
+      <Animated.View style={[styles.deleteSurface, { opacity: translateX.interpolate({ inputRange: [-70, -1, 0], outputRange: [1, 1, 0], extrapolate: "clamp" }) }]}>
         <Pressable
           accessibilityLabel="খরচ মুছুন"
           onPress={() => onDelete(expense.id)}
@@ -68,7 +73,7 @@ function ExpenseRow({
         >
           <Ionicons name="trash-outline" size={20} color="#fff" />
         </Pressable>
-      </View>
+      </Animated.View>
       <Animated.View
         {...panResponder.panHandlers}
         style={[
@@ -76,7 +81,7 @@ function ExpenseRow({
           dark && darkStyles.row,
           isLast && styles.rowLast,
           {
-            backgroundColor: surfaceColor || (dark ? "#202536" : "#fff"),
+            backgroundColor: surfaceColor || (dark ? "#2a2924" : "#fff"),
             transform: [{ translateX }],
           },
         ]}
@@ -84,20 +89,20 @@ function ExpenseRow({
         <CategoryIcon
           icon={expense.icon}
           size={20}
-          color={dark ? "#c3f0d2" : PURPLE}
-          containerStyle={[styles.categoryIcon, dark && darkStyles.categoryIcon]}
+          color={orbit?.text ?? (dark ? "#edc176" : PURPLE)}
+          containerStyle={[styles.categoryIcon, dark && darkStyles.categoryIcon, orbit && { backgroundColor: orbit.soft }]}
         />
         <View style={styles.copy}>
-          <Text style={[styles.rowTitle, dark && darkStyles.rowTitle]}>
-            {expense.categoryName}
-            {expense.subcategoryName ? ` · ${expense.subcategoryName}` : ""}
+          <Text style={[styles.rowTitle, dark && darkStyles.rowTitle, orbit && { color: orbit.text }]} numberOfLines={1}>
+            {expense.note || expense.categoryName}
+            {!expense.note && expense.subcategoryName ? ` · ${expense.subcategoryName}` : ""}
           </Text>
-          <Text style={[styles.muted, dark && darkStyles.muted]}>
+          <Text style={[styles.muted, dark && darkStyles.muted, orbit && { color: orbit.muted }]} numberOfLines={2}>
+            {expense.note ? `${expense.categoryName}${expense.subcategoryName ? ` · ${expense.subcategoryName}` : ""} · ` : ""}
             {dateText(expense.expenseDate, language)}
-            {expense.note ? ` · ${expense.note}` : ""}
           </Text>
         </View>
-        <Text style={[styles.amount, dark && darkStyles.amount]}>
+        <Text numberOfLines={1} style={[styles.amount, dark && darkStyles.amount, orbit && { color: orbit.text, fontSize: 12, fontWeight: "500" }]}>
           {taka(expense.amount, language)}
         </Text>
         <AnimatedPressable
@@ -121,7 +126,7 @@ function ExpenseRow({
           }
           onPress={() => onEdit(expense)}
         >
-          <Ionicons name="create-outline" size={18} color={dark ? "#a8e6bd" : PURPLE} />
+          <Ionicons name="create-outline" size={18} color={orbit?.text ?? (dark ? "#f5f0e6" : "#181713")} />
         </AnimatedPressable>
       </Animated.View>
     </View>
@@ -140,7 +145,7 @@ export function EmptyState({
   return (
     <View style={[styles.emptyState, compact && styles.emptyStateCompact, dark && darkStyles.emptyState]}>
       <View style={[styles.emptyStateIcon, dark && darkStyles.emptyStateIcon]}>
-        <Ionicons name={icon} size={28} color={dark ? "#a8e6bd" : PURPLE} />
+        <Ionicons name={icon} size={28} color={dark ? "#edc176" : PURPLE} />
       </View>
       <Text style={[styles.emptyStateTitle, dark && darkStyles.emptyStateTitle]}>{title}</Text>
       {message && (
@@ -149,15 +154,7 @@ export function EmptyState({
         </Text>
       )}
       {actionLabel && onAction && (
-        <Pressable
-          accessibilityRole="button"
-          style={[styles.emptyStateAction, dark && darkStyles.emptyStateAction]}
-          onPress={onAction}
-          android_ripple={{ color: "#ffffff33" }}
-        >
-          <Ionicons name="add" size={16} color="#fff" />
-          <Text style={styles.emptyStateActionText}>{actionLabel}</Text>
-        </Pressable>
+        <EmptyStateAction label={actionLabel} onPress={onAction} />
       )}
     </View>
   );
@@ -166,18 +163,23 @@ export function EmptyState({
 export function ExpenseList({
   expenses,
   surfaceColor,
+  appearance,
+  showDateHeaders = false,
   onDelete,
   onEdit,
   emptyState,
 }: {
   expenses: Expense[];
   surfaceColor?: string;
+  appearance?: "orbit";
+  showDateHeaders?: boolean;
   onDelete: (id: number) => void;
   onEdit: (expense: Expense) => void;
   emptyState?: EmptyStateConfig;
 }) {
   const dark = useContext(ThemeContext);
   const [visibleCount, setVisibleCount] = useState(50);
+  const { language } = useContext(LanguageContext);
   useEffect(() => setVisibleCount(50), [expenses]);
 
   return (
@@ -185,15 +187,19 @@ export function ExpenseList({
       {expenses.length ? (
         <>
           {expenses.slice(0, visibleCount).map((expense, index, visibleExpenses) => (
+            <React.Fragment key={expense.id}>
+            {showDateHeaders && (index === 0 || visibleExpenses[index - 1].expenseDate !== expense.expenseDate) ?
+              <Text style={[styles.dateHeader, dark && { color: "#b9b2a4" }]}>{dateText(expense.expenseDate, language)}</Text> : null}
             <ExpenseRow
-              key={expense.id}
               expense={expense}
               dark={dark}
               surfaceColor={surfaceColor}
+              appearance={appearance}
               isLast={index === visibleExpenses.length - 1}
               onDelete={onDelete}
               onEdit={onEdit}
             />
+            </React.Fragment>
           ))}
           {visibleCount < expenses.length && (
             <Pressable
@@ -221,7 +227,8 @@ export function ExpenseList({
 
 const styles = StyleSheet.create({
   list: { marginTop: 12 },
-  rowClip: { position: "relative", overflow: "hidden" },
+  dateHeader: { color: "#686358", fontSize: 11, marginTop: 10, marginBottom: 8 },
+  rowClip: { position: "relative", overflow: "hidden", borderRadius: 13, marginBottom: 7 },
   deleteSurface: {
     position: "absolute",
     top: 0,
@@ -241,47 +248,49 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 11,
-    borderBottomWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    backgroundColor: "#fff",
+    borderBottomWidth: 0,
     borderBottomColor: "#f0f1f5",
     gap: 11,
   },
   rowLast: { borderBottomWidth: 0, borderBottomColor: "transparent" },
   categoryIcon: {
-    width: 41,
-    height: 41,
-    borderRadius: 13,
-    backgroundColor: "#e5f4eb",
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: "#f7ead0",
     alignItems: "center",
     justifyContent: "center",
   },
   copy: { flex: 1, minWidth: 0 },
-  rowTitle: { color: "#1c2030", fontSize: 14, fontWeight: "600" },
-  muted: { color: "#8a8fa3", fontSize: 11 },
-  amount: { color: "#1c2030", fontSize: 13, fontWeight: "700" },
+  rowTitle: { color: "#181713", fontSize: 12, fontWeight: "500" },
+  muted: { color: "#706b61", fontSize: 11 },
+  amount: { color: "#181713", fontSize: 13, fontWeight: "600" },
   editButton: { width: 31, height: 31, alignItems: "center", justifyContent: "center" },
   emptyState: { alignItems: "center", justifyContent: "center", paddingVertical: 28, paddingHorizontal: 18 },
   emptyStateCompact: { paddingVertical: 20 },
-  emptyStateIcon: { width: 60, height: 60, borderRadius: 20, backgroundColor: "#e5f4eb", alignItems: "center", justifyContent: "center", marginBottom: 12 },
-  emptyStateTitle: { color: "#1c2030", fontSize: 15, fontWeight: "800", textAlign: "center" },
-  emptyStateMessage: { color: "#8a8fa3", fontSize: 12, lineHeight: 18, textAlign: "center", marginTop: 6, maxWidth: 280 },
-  emptyStateAction: { minHeight: 38, borderRadius: 10, backgroundColor: PURPLE, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 14, overflow: "hidden" },
-  emptyStateActionText: { color: "#fff", fontSize: 12, fontWeight: "700" },
-  loadMore: { alignSelf: "center", borderRadius: 10, backgroundColor: "#e5f4eb", paddingVertical: 9, paddingHorizontal: 16, marginTop: 8 },
-  loadMoreText: { color: PURPLE, fontSize: 12, fontWeight: "700" },
+  emptyStateIcon: { width: 60, height: 60, borderRadius: 20, backgroundColor: "#f7ead0", alignItems: "center", justifyContent: "center", marginBottom: 12 },
+  emptyStateTitle: { color: "#181713", fontSize: 15, fontWeight: "600", textAlign: "center" },
+  emptyStateMessage: { color: "#706b61", fontSize: 12, lineHeight: 18, textAlign: "center", marginTop: 6, maxWidth: 280 },
+  emptyStateAction: { minHeight: 38, borderRadius: 10, backgroundColor: "#dfa43e", paddingHorizontal: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 14, overflow: "hidden" },
+  emptyStateActionText: { color: "#181713", fontSize: 12, fontWeight: "600" },
+  loadMore: { alignSelf: "center", borderRadius: 10, backgroundColor: "#f7ead0", paddingVertical: 9, paddingHorizontal: 16, marginTop: 8 },
+  loadMoreText: { color: PURPLE, fontSize: 12, fontWeight: "600" },
 });
 
 const darkStyles = StyleSheet.create({
-  row: { borderBottomColor: "#343c52" },
-  categoryIcon: { backgroundColor: "#1b5a40" },
-  rowTitle: { color: "#f2f3f8" },
-  muted: { color: "#a7acc0" },
-  amount: { color: "#f2f3f8" },
+  row: { borderBottomColor: "#454035", backgroundColor: "#2a2924" },
+  categoryIcon: { backgroundColor: "#48391f" },
+  rowTitle: { color: "#f5f0e6" },
+  muted: { color: "#b9b2a4" },
+  amount: { color: "#f5f0e6" },
   emptyState: {},
-  emptyStateIcon: { backgroundColor: "#1b5a40" },
-  emptyStateTitle: { color: "#f2f3f8" },
-  emptyStateMessage: { color: "#a7acc0" },
-  emptyStateAction: { backgroundColor: "#2c9d6b" },
-  loadMore: { backgroundColor: "#164b35" },
-  loadMoreText: { color: "#c3f0d2" },
+  emptyStateIcon: { backgroundColor: "#48391f" },
+  emptyStateTitle: { color: "#f5f0e6" },
+  emptyStateMessage: { color: "#b9b2a4" },
+  emptyStateAction: { backgroundColor: "#dfa43e" },
+  loadMore: { backgroundColor: "#48391f" },
+  loadMoreText: { color: "#edc176" },
 });

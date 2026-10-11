@@ -139,8 +139,8 @@ export function AppDatePicker({
               );
             })}
           </View>
-          <Pressable style={styles.primary} onPress={onConfirm || onClose}>
-            <Text style={styles.primaryText}>তারিখ ঠিক আছে</Text>
+          <Pressable style={[styles.primary, dark && darkStyles.primary]} onPress={onConfirm || onClose}>
+            <Text style={[styles.primaryText, dark && darkStyles.primaryText]}>তারিখ ঠিক আছে</Text>
           </Pressable>
         </View>
       </View>

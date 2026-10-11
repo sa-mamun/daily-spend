@@ -3,7 +3,6 @@
     "name": "Daily Spend",
     "slug": "expense-tracker-lite",
     "version": "1.0.0",
-    "orientation": "portrait",
     "icon": "./assets/icon.png",
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -29,7 +28,16 @@
     },
     "plugins": [
       "expo-sqlite",
-      "@react-native-community/datetimepicker"
+      "./plugins/with-r8-optimization",
+      "expo-sharing",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#087443"
+        }
+      ],
+      "expo-font"
     ],
     "extra": {
       "eas": {

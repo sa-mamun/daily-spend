@@ -34,7 +34,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     zIndex: 1000,
-    backgroundColor: "#f7f8fc",
+    backgroundColor: "#efebe2",
   },
   image: { width: "100%", height: "100%" },
 });

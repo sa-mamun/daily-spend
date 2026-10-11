@@ -1,5 +1,5 @@
-import React, { useContext, useMemo, useRef } from "react";
-import { Animated, Pressable, View } from "react-native";
+import React, { useContext, useMemo } from "react";
+import { Pressable, View } from "react-native";
 import { Text } from "../../i18n/Text";
 import { LanguageContext } from "../../context/LanguageContext";
 import { ThemeContext, PURPLE } from "../../theme/constants";
@@ -8,8 +8,7 @@ import type { Category, Expense, Subcategory } from "../../types/models";
 import { taka } from "../../utils/dates";
 import { CategoryIcon } from "../../components/CategoryIcon";
 import { EmptyState } from "../../components/ExpenseList";
-
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+import { CompactActionButton } from "../../components/CompactActionButton";
 
 export function CategoryScreen({
   categories,
@@ -26,7 +25,6 @@ export function CategoryScreen({
   onOpenSubcategories: (id: number) => void;
   onCategoryLongPress: (category: Category) => void;
 }) {
-  const categoryPageScale = useRef(new Animated.Value(1)).current;
   const dark = useContext(ThemeContext);
   const { language } = useContext(LanguageContext);
   const categoryTotals = useMemo(
@@ -41,7 +39,7 @@ export function CategoryScreen({
   return (
     <>
       <View style={styles.pageIntro}>
-        <View>
+        <View style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
           <Text style={[styles.sectionTitle, dark && darkStyles.cardTitle]}>
             খরচের ধরন
           </Text>
@@ -49,50 +47,10 @@ export function CategoryScreen({
             Category-তে tap করে subcategory manage করুন
           </Text>
         </View>
-        <AnimatedPressable
-          accessibilityRole="button"
-          accessibilityLabel="নতুন category যোগ করুন"
-          style={[
-            styles.smallPrimary,
-            {
-              width: 38,
-              height: 38,
-              borderRadius: 19,
-              padding: 0,
-              alignItems: "center",
-              justifyContent: "center",
-              transform: [{ scale: categoryPageScale }],
-            },
-          ]}
-          onPressIn={() =>
-            Animated.spring(categoryPageScale, {
-              toValue: 0.9,
-              useNativeDriver: true,
-              speed: 20,
-              bounciness: 6,
-            }).start()
-          }
-          onPressOut={() =>
-            Animated.spring(categoryPageScale, {
-              toValue: 1,
-              useNativeDriver: true,
-              speed: 20,
-              bounciness: 6,
-            }).start()
-          }
+        <CompactActionButton kind="add" tone="solid" label={language === "en" ? "Add" : "যোগ"}
+          accessibilityLabel={language === "en" ? "Add category" : "নতুন category যোগ করুন"}
           onPress={onAdd}
-        >
-          <Text
-            style={{
-              color: "#fff",
-              fontSize: 22,
-              lineHeight: 24,
-              fontWeight: "500",
-            }}
-          >
-            ＋
-          </Text>
-        </AnimatedPressable>
+        />
       </View>
       {categories.length ? (
         <View style={styles.categoryGrid}>
@@ -109,7 +67,7 @@ export function CategoryScreen({
                 <CategoryIcon
                   icon={c.icon}
                   size={20}
-                  color={dark ? "#c3f0d2" : PURPLE}
+                  color={dark ? "#edc176" : PURPLE}
                   containerStyle={[styles.categoryIcon, dark && darkStyles.categoryIcon]}
                 />
                 <View style={styles.categoryInfo}>
@@ -120,7 +78,7 @@ export function CategoryScreen({
                   >
                     {c.name}
                   </Text>
-                  <Text style={styles.muted}>
+                  <Text style={[styles.muted, dark && darkStyles.muted]}>
                     {taka(
                       categoryTotals[c.id] || 0,
                       language,

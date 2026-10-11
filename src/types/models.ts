@@ -22,3 +22,23 @@ export type DashboardStats = {
   topCategory: string;
 };
 export type IconName = React.ComponentProps<typeof Ionicons>["name"];
+export type ReminderRepeatUnit = "weekly" | "monthly" | "yearly";
+export type ScheduledReminder = {
+  id: number;
+  name: string;
+  amount: number;
+  categoryId: number;
+  categoryName: string;
+  categoryIcon: string;
+  subcategoryId: number | null;
+  subcategoryName: string | null;
+  note: string;
+  repeatUnit: ReminderRepeatUnit;
+  weekday: number | null;
+  dueDay: number | null;
+  dueMonth: number | null;
+  reminderHour: number;
+  reminderMinute: number;
+  endDate: string | null;
+  isActive: boolean;
+};
